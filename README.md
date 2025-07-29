@@ -49,3 +49,8 @@ This project is in progress.
 
 
 
+##Poetry
+poetry install
+
+
+
