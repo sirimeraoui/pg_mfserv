@@ -39,7 +39,7 @@ Send http requests to the api using any http service.
 As an example, your can use the ais.sql that will create ships and ship2 tables containing ships data.
 To do that you will have to change the path in the script to the path of your .csv file.
  
-Here is a link to download ships datasets: [Denmark Ships DataSets](https://web.ais.dk/aisdata/)
+Here is a link to download ships datasets: [Denmark Ships DataSets](http://aisdata.ais.dk/?prefix=2024/)
 
 ## Developement
 

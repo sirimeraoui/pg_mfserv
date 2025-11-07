@@ -4,8 +4,6 @@ from utils import column_discovery, send_json_response, column_discovery2
 from pymeos.db.psycopg2 import MobilityDB
 from psycopg2 import sql
 import json
-import urllib
-
 from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
 
@@ -15,11 +13,10 @@ hostName = "localhost"
 serverPort = 8080
 
 host = 'localhost'
-# 25432
-port = 5432 
+port = 25431
 db = 'postgres'
 user = 'postgres'
-password = 'postgres'
+password = 'mysecretpassword'
 
 connection = MobilityDB.connect(host=host, port=port, database=db, user=user, password=password)
 cursor = connection.cursor()
@@ -27,55 +24,30 @@ cursor = connection.cursor()
 
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
-        # new GET /collections/{collectionId}/items/{featureId}
-
-        path_parts = self.path.strip('/').split('/')
-        if len(path_parts) == 4 and path_parts[0] == 'collections' and path_parts[2] == 'items':
-            self.do_get_squence(path_parts)
+        if 'tgsequence' in self.path:
+            self.do_get_squence()
         elif 'tproperties' in self.path:
             self.do_get_tproperties()
         elif self.path == '/':
             self.do_home()
-        # /collections  unchanged
         elif self.path == '/collections':
             self.do_collections()
-
         elif self.path.startswith('/collections') and '/items/' in self.path:
             collectionId = self.path.split('/')[2]
             feature_id = self.path.split('/')[-1]
             self.do_get_meta_data(collectionId, feature_id)
-        #/collections/vehicles/items
-        # /collections/vehicles/items?crs=http://www.opengis.net/def/crs/EPSG/0/4326
-        # Add query params: bbox, crs, bbox-crs, filter. Part2-3
-        # elif '/items' in self.path and self.path.startswith('/collections/'):
-        #     # Extract collection ID from the path
-        #     collection_id = self.path.split('/')[2]
-        #     self.do_get_collection_items(collection_id)
-        elif self.path.startswith('/collections/') and '/items' in self.path:
-            parsed_url = urllib.parse.urlparse(self.path)
-            path_parts = parsed_url.path.strip('/').split('/')
-            
-            if len(path_parts) >= 3 and path_parts[2] == 'items':
-                collection_id = path_parts[1]
-
-                # Parse query parameters (bbox, datetime, filter, etc.)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                bbox = query_params.get('bbox', [None])[0]
-                datetime_param = query_params.get('datetime', [None])[0]
-                filter_param = query_params.get('filter', [None])[0]
-                crs = query_params.get('crs', [None])[0]
-
-                self.do_get_collection_items(collection_id, bbox=bbox, datetime=datetime_param, filter_param=filter_param, crs=crs)
-
-        # /collections/{collectionId} unchanged
+        elif '/items' in self.path and self.path.startswith('/collections/'):
+            # Extract collection ID from the path
+            collection_id = self.path.split('/')[2]
+            self.do_get_collection_items(collection_id)
         elif self.path.startswith('/collections/'):
             # Extract collection ID from the path
             collection_id = self.path.split('/')[-1]
             self.do_collection_id(collection_id)
 
-    def do_get_squence(self,path_parts):
-        collection_id = path_parts[1]
-        feature_id = path_parts[3]
+    def do_get_squence(self):
+        collection_id = self.path.split('/')[2]
+        feature_id = self.path.split('/')[4]
         self.do_get_movement_single_moving_feature(collection_id, feature_id)
 
     def do_get_tproperties(self):
@@ -247,14 +219,9 @@ class MyServer(BaseHTTPRequestHandler):
         dateTime2 = dateTime[0].split(',')[1]
 
         columns = column_discovery(collectionId,cursor)
-        # id = columns[0][0]
-        # trip = columns[1][0]
-        try:
-            id = columns[0][0]
-            trip = columns[1][0]
-        except IndexError:
-            self.send_error(404, "No data found for collection '{}'".format(collectionId))
-            return
+        id = columns[0][0]
+        trip = columns[1][0]
+
         query = (
             f"SELECT {id}, asMFJSON({trip}), count(trip) OVER() as total_count "
             f"FROM public.{collectionId} "
@@ -323,15 +290,8 @@ class MyServer(BaseHTTPRequestHandler):
 
     def do_get_movement_single_moving_feature(self, collectionId, featureId):
         columns = column_discovery(collectionId, cursor)
-        # id = columns[0][0]
-    #    trip = columns[1][0]
-        try:
-            id = columns[0][0]
-            trip = columns[1][0]
-        except IndexError:
-            self.send_error(404, "No data found for collection '{}' and feature '{}'".format(collectionId, featureId))
-            return
-
+        id = columns[0][0]
+        trip = columns[1][0]
         try:
             parsed_url = urlparse(self.path)
             query_params = parse_qs(parsed_url.query)
@@ -374,7 +334,7 @@ class MyServer(BaseHTTPRequestHandler):
             self.handle_error(400, str(e))
 
     def do_post_collection_items(self, collectionId):
-        
+
         try:
             content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
             post_data = self.rfile.read(content_length)
@@ -536,4 +496,3 @@ if __name__ == "__main__":
     pymeos_finalize()
     webServer.server_close()
     print("Server stopped.")
-
