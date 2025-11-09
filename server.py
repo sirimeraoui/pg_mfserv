@@ -8,6 +8,7 @@ from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
 from resource.Collection import do_collection_id, do_post_collection,do_delete_collection
 from resource.Collections import do_collections
+from resource.MovingFeatures import do_get_collection_items, do_post_collection_items
 pymeos_initialize()
 
 hostName = "localhost"
@@ -40,7 +41,7 @@ class MyServer(BaseHTTPRequestHandler):
         elif '/items' in self.path and self.path.startswith('/collections/'):
             # Extract collection ID from the path
             collection_id = self.path.split('/')[2]
-            self.do_get_collection_items(collection_id)
+            self.do_get_collection_items(collection_id,connection, cursor)
         elif self.path.startswith('/collections/'):
             # Extract collection ID from the path
             collection_id = self.path.split('/')[-1]
@@ -69,7 +70,7 @@ class MyServer(BaseHTTPRequestHandler):
             self.do_post_collection(connection,cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[2]
-            self.do_post_collection_items(collection_id)
+            self.do_post_collection_items(collection_id,connection, cursor)
 
     def do_post_sequence(self):
         collection_id = self.path.split('/')[2]
@@ -265,61 +266,62 @@ class MyServer(BaseHTTPRequestHandler):
             self.handle_error(404 if 'does not exist' in str(e) else 500,
                               'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
 
-    def do_get_collection_items(self, collectionId):
-        parsed_url = urlparse(self.path)
-        query_params = parse_qs(parsed_url.query)
-        limit = 10 if query_params.get('limit') is None else query_params.get('limit')[0]
-        x1, y1, x2, y2 = query_params.get('x1')[0], query_params.get('y1')[0], query_params.get('x2')[0], query_params.get('y2')[0]
-        subTrajectory = query_params.get('subTrajectory')[0]
-        dateTime = query_params.get('dateTime')
+    def do_get_collection_items(self, collectionId, connection, cursor):
+        do_get_collection_items(self, collectionId,connection, cursor)
+        # parsed_url = urlparse(self.path)
+        # query_params = parse_qs(parsed_url.query)
+        # limit = 10 if query_params.get('limit') is None else query_params.get('limit')[0]
+        # x1, y1, x2, y2 = query_params.get('x1')[0], query_params.get('y1')[0], query_params.get('x2')[0], query_params.get('y2')[0]
+        # subTrajectory = query_params.get('subTrajectory')[0]
+        # dateTime = query_params.get('dateTime')
 
-        dateTime1 = dateTime[0].split(',')[0]
-        dateTime2 = dateTime[0].split(',')[1]
+        # dateTime1 = dateTime[0].split(',')[0]
+        # dateTime2 = dateTime[0].split(',')[1]
 
-        columns = column_discovery(collectionId,cursor)
-        id = columns[0][0]
-        trip = columns[1][0]
+        # columns = column_discovery(collectionId,cursor)
+        # id = columns[0][0]
+        # trip = columns[1][0]
 
-        query = (
-            f"SELECT {id}, asMFJSON({trip}), count(trip) OVER() as total_count "
-            f"FROM public.{collectionId} "
-            f"WHERE atstbox(trip, stbox 'SRID=25832;STBOX XT((({x1},{y1}), ({x2},{y2})),[{dateTime1},{dateTime2}])') IS NOT NULL "
-            f"LIMIT {limit};"
-        )
+        # query = (
+        #     f"SELECT {id}, asMFJSON({trip}), count(trip) OVER() as total_count "
+        #     f"FROM public.{collectionId} "
+        #     f"WHERE atstbox(trip, stbox 'SRID=25832;STBOX XT((({x1},{y1}), ({x2},{y2})),[{dateTime1},{dateTime2}])') IS NOT NULL "
+        #     f"LIMIT {limit};"
+        # )
 
-        cursor.execute(query)
-        row_count = cursor.rowcount
-        data = cursor.fetchall()
+        # cursor.execute(query)
+        # row_count = cursor.rowcount
+        # data = cursor.fetchall()
 
-        total_row_count = data[0][2]
-        crs = json.loads(data[0][1])["crs"]
-        features = []
+        # total_row_count = data[0][2]
+        # crs = json.loads(data[0][1])["crs"]
+        # features = []
 
-        for row in data:
-            feature = json.loads(row[1])
-            print(feature)
-            tPoint = TGeomPoint.from_mfjson(json.dumps(feature))
-            bbox = tPoint.bounding_box()
-            feature["bbox"] = [bbox.xmin(), bbox.ymin(), bbox.xmax(), bbox.ymax()]
-            feature["id"] = row[0]
-            feature.pop("datetimes", None)
-            features.append(feature)
-            print(feature)
-        # Convert the GeoJSON data to a JSON string
-        geojson_data = {
-            "type": "FeatureCollection",
-            "features": features,
-            "crs": crs,
-            "timeStamp": "To be defined",
-            "numberMatched": total_row_count,
-            "numberReturned": row_count
-        }
+        # for row in data:
+        #     feature = json.loads(row[1])
+        #     print(feature)
+        #     tPoint = TGeomPoint.from_mfjson(json.dumps(feature))
+        #     bbox = tPoint.bounding_box()
+        #     feature["bbox"] = [bbox.xmin(), bbox.ymin(), bbox.xmax(), bbox.ymax()]
+        #     feature["id"] = row[0]
+        #     feature.pop("datetimes", None)
+        #     features.append(feature)
+        #     print(feature)
+        # # Convert the GeoJSON data to a JSON string
+        # geojson_data = {
+        #     "type": "FeatureCollection",
+        #     "features": features,
+        #     "crs": crs,
+        #     "timeStamp": "To be defined",
+        #     "numberMatched": total_row_count,
+        #     "numberReturned": row_count
+        # }
 
-        # Convert the GeoJSON data to a JSON string
-        geojson_string = json.dumps(geojson_data)
+        # # Convert the GeoJSON data to a JSON string
+        # geojson_string = json.dumps(geojson_data)
 
-        # Define the coordinates of the polygon's vertices
-        send_json_response(self,200, geojson_string)
+        # # Define the coordinates of the polygon's vertices
+        # send_json_response(self,200, geojson_string)
 
     def do_get_meta_data(self, collectionId, featureId):
         print("GET request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
@@ -390,49 +392,50 @@ class MyServer(BaseHTTPRequestHandler):
         except Exception as e:
             print(str(e))
             self.handle_error(400, str(e))
+    def do_post_collection_items(self, collectionId,connection, cursor):
+        do_post_collection_items(self, collectionId,connection, cursor)
+    # def do_post_collection_items(self, collectionId):
+    #     try:
+    #         content_length = int(self.headers['Content-Length'])
+    #         post_data = self.rfile.read(content_length)
+    #         print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" %
+    #             (self.path, self.headers, post_data.decode('utf-8')))
 
-    def do_post_collection_items(self, collectionId):
-        try:
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" %
-                (self.path, self.headers, post_data.decode('utf-8')))
+    #         # list of features
+    #         features_list = json.loads(post_data.decode('utf-8'))
+    #         if not isinstance(features_list, list):
+    #             features_list = [features_list]  # wrap single feature into list
 
-            # list of features
-            features_list = json.loads(post_data.decode('utf-8'))
-            if not isinstance(features_list, list):
-                features_list = [features_list]  # wrap single feature into list
+    #         for feature in features_list:
+    #             feat_id = feature.get("id")
+    #             tempGeo = feature.get("temporalGeometry")
 
-            for feature in features_list:
-                feat_id = feature.get("id")
-                tempGeo = feature.get("temporalGeometry")
+    #             if tempGeo is None:
+    #                 print(f"Skipping feature {feat_id}: no temporalGeometry")
+    #                 continue  # skip invalid feature
 
-                if tempGeo is None:
-                    print(f"Skipping feature {feat_id}: no temporalGeometry")
-                    continue  # skip invalid feature
+    #             try:
+    #                 # Validate and convert to TGeomPoint
+    #                 tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
 
-                try:
-                    # Validate and convert to TGeomPoint
-                    tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
+    #                 # Insert into the collection
+    #                 sql_query = f"INSERT INTO public.{collectionId} VALUES({feat_id}, '{tGeomPoint}')"
+    #                 cursor.execute(sql_query)
+    #                 connection.commit()
+    #                 print(f"Successfully inserted feature {feat_id}")
 
-                    # Insert into the collection
-                    sql_query = f"INSERT INTO public.{collectionId} VALUES({feat_id}, '{tGeomPoint}')"
-                    cursor.execute(sql_query)
-                    connection.commit()
-                    print(f"Successfully inserted feature {feat_id}")
-
-                except Exception as e:
-                    connection.rollback()
-                    print(f"Skipping feature {feat_id} due to error: {e}")
+    #             except Exception as e:
+    #                 connection.rollback()
+    #                 print(f"Skipping feature {feat_id} due to error: {e}")
 
            
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(json.dumps({"status": "done"}), "utf-8"))
+    #         self.send_response(200)
+    #         self.send_header("Content-type", "application/json")
+    #         self.end_headers()
+    #         self.wfile.write(bytes(json.dumps({"status": "done"}), "utf-8"))
 
-        except Exception as e:
-            self.handle_error(400 if "DataError" in str(e) else 500, str(e))
+    #     except Exception as e:
+    #         self.handle_error(400 if "DataError" in str(e) else 500, str(e))
 
 
     def do_add_movement_data_in_mf(self, collectionId, featureId):
