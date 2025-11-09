@@ -6,7 +6,8 @@ from psycopg2 import sql
 import json
 from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
-
+from resource.Collection import do_collection_id, do_post_collection,do_delete_collection
+from resource.Collections import do_collections
 pymeos_initialize()
 
 hostName = "localhost"
@@ -31,7 +32,7 @@ class MyServer(BaseHTTPRequestHandler):
         elif self.path == '/':
             self.do_home()
         elif self.path == '/collections':
-            self.do_collections()
+            self.do_collections(connection,cursor)
         elif self.path.startswith('/collections') and '/items/' in self.path:
             collectionId = self.path.split('/')[2]
             feature_id = self.path.split('/')[-1]
@@ -43,7 +44,7 @@ class MyServer(BaseHTTPRequestHandler):
         elif self.path.startswith('/collections/'):
             # Extract collection ID from the path
             collection_id = self.path.split('/')[-1]
-            self.do_collection_id(collection_id)
+            self.do_collection_id(collection_id,connection, cursor)
 
     def do_get_squence(self):
         collection_id = self.path.split('/')[2]
@@ -65,7 +66,7 @@ class MyServer(BaseHTTPRequestHandler):
         if 'tgsequence' in self.path:
             self.do_post_sequence()
         elif self.path == '/collections':
-            self.do_post_collection()
+            self.do_post_collection(connection,cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[2]
             self.do_post_collection_items(collection_id)
@@ -81,7 +82,7 @@ class MyServer(BaseHTTPRequestHandler):
             self.do_delete_sequence()
         elif self.path.startswith('/collections/') and 'items' not in self.path:
             collection_id = self.path.split('/')[-1]
-            self.do_delete_collection(collection_id)
+            self.do_delete_collection(collection_id,connection, cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             # Extract collection ID and mFeatureId from the path
             components = self.path.split('/')
@@ -118,95 +119,131 @@ class MyServer(BaseHTTPRequestHandler):
         self.wfile.write(
             bytes("<html><head></head><p>Request: This is the base route of the pyApi</p>body></body></html>", "utf-8"))
 
-    # Get all collections
-    def do_collections(self):
-        try:
-            cursor.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
-            )
-            fetched_collections = cursor.fetchall()
+    # # OGC COMPLIANT
+    # # Get all collections 
+    def do_collections(self,connection,cursor):
+        do_collections(self,connection,cursor)
+    # def do_collections(self):
+    #     try:
+    #         cursor.execute(
+    #             "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
+    #         )
+    #         fetched_collections = cursor.fetchall()
 
-            base_url = f"http://{hostName}:{serverPort}"
+    #         base_url = f"http://{hostName}:{serverPort}"
 
-            collections_list = []
-            for (table_name,) in fetched_collections:
-                collections_list.append({
-                    "id": table_name,
-                    "title": table_name,
-                    "links": [
-                        {
-                            "href": f"{base_url}/collections/{table_name}",
-                            "rel": "self",
-                            "type": "application/json"
-                        }
-                    ]
-                })
+    #         collections_list = []
+    #         for (table_name,) in fetched_collections:
+    #             collections_list.append({
+    #                 "id": table_name,
+    #                 "title": table_name,
+    #                 "links": [
+    #                     {
+    #                         "href": f"{base_url}/collections/{table_name}",
+    #                         "rel": "self",
+    #                         "type": "application/json"
+    #                     }
+    #                 ]
+    #             })
 
-            response = {
-                "collections": collections_list,
-                "links": [
-                    {"href": f"{base_url}/collections", "rel": "self", "type": "application/json"}
-                ]
-            }
+    #         response = {
+    #             "collections": collections_list,
+    #             "links": [
+    #                 {"href": f"{base_url}/collections", "rel": "self", "type": "application/json"}
+    #             ]
+    #         }
 
-            json_data = json.dumps(response)
-            send_json_response(self, 200, json_data)
+    #         json_data = json.dumps(response)
+    #         send_json_response(self, 200, json_data)
 
-        except Exception as e:
-            self.handle_error(500, f"Internal server error: {str(e)}")
+    #     except Exception as e:
+    #         self.handle_error(500, f"Internal server error: {str(e)}")
 
+    def do_post_collection(self,connection,cursor):
+        do_post_collection(self,connection,cursor)
 
-    def do_post_collection(self):
-        try:
-            content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
-            post_data = self.rfile.read(content_length)  # <--- Gets the data itself
-            print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" % (
-                self.path, self.headers, post_data.decode('utf-8')))
+    # def do_post_collection(self):
+    #     try:
+    #         content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
+    #         post_data = self.rfile.read(content_length)  # <--- Gets the data itself
+    #         print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" % (
+    #             self.path, self.headers, post_data.decode('utf-8')))
 
-            data_dict = json.loads(post_data.decode('utf-8'))
-            title_lower = data_dict["title"].lower().replace(" ", "_")
+    #         data_dict = json.loads(post_data.decode('utf-8'))
+    #         title_lower = data_dict["title"].lower().replace(" ", "_")
 
-            cursor.execute(sql.SQL("DROP TABLE IF EXISTS public.{table}").format(table=sql.Identifier(title_lower)))
-            cursor.execute(sql.SQL(
-                "CREATE TABLE public.{table} (id SERIAL PRIMARY KEY, title TEXT, updateFrequency integer, description TEXT, itemType TEXT)").format(
-                table=sql.Identifier(title_lower)))
-            # cursor.execute("INSERT INTO public.moving_humans VALUES(DEFAULT, %s, %s, %s, %s)", (data_dict["title"], data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
-            connection.commit()
+    #         cursor.execute(sql.SQL("DROP TABLE IF EXISTS public.{table}").format(table=sql.Identifier(title_lower)))
+    #         cursor.execute(sql.SQL(
+    #             "CREATE TABLE public.{table} (id SERIAL PRIMARY KEY, title TEXT, updateFrequency integer, description TEXT, itemType TEXT)").format(
+    #             table=sql.Identifier(title_lower)))
+    #         # cursor.execute("INSERT INTO public.moving_humans VALUES(DEFAULT, %s, %s, %s, %s)", (data_dict["title"], data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
+    #         connection.commit()
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(post_data.decode('utf-8'), "utf-8"))
-        except Exception as e:
-            self.handle_error(500, 'Internal server error')
+    #         self.send_response(200)
+    #         self.send_header("Content-type", "application/json")
+    #         self.end_headers()
+    #         self.wfile.write(bytes(post_data.decode('utf-8'), "utf-8"))
+    #     except Exception as e:
+    #         self.handle_error(500, 'Internal server error')
 
-    def do_collection_id(self, collectionId):
-        try:
-            cursor.execute(sql.SQL("SELECT * FROM public.{table};").format(table=sql.Identifier(collectionId)))
-            r = cursor.fetchall()
+    def do_collection_id(self, collectionId,connection,cusor):
+        do_collection_id(self, collectionId,connection,cursor)
 
-            # Convert fetched data to JSON
-            res = json.dumps(r)
+    # def do_collection_id(self, collectionId):
+    #     try:
+    #         # First verify the collection exists
+    #         cursor.execute("""
+    #             SELECT EXISTS (
+    #                 SELECT FROM information_schema.tables 
+    #                 WHERE table_schema = 'public' 
+    #                 AND table_name = %s
+    #             );
+    #         """, (collectionId,))
+            
+    #         if not cursor.fetchone()[0]:
+    #             self.handle_error(404, 'Collection not found')
+    #             return
 
-            # Send response
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(res.encode('utf-8'))
-        except Exception as e:
-            # Handle any exceptions
-            self.handle_error(404 if 'does not exist' in str(e) else 500,
-                              'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
+    #         # Get collection metadata - you'll need to store this somewhere
+    #         # For now, creating a minimal compliant response
+    #         base_url = f"http://{hostName}:{serverPort}"
+            
+    #         collection_metadata = {
+    #             "id": collectionId,
+    #             "title": collectionId,  # You should store proper titles
+    #             "description": f"Collection of moving features: {collectionId}",
+    #             "links": [
+    #                 {
+    #                     "href": f"{base_url}/collections/{collectionId}",
+    #                     "rel": "self",
+    #                     "type": "application/json",
+    #                     "title": "This document"
+    #                 },
+    #                 {
+    #                     "href": f"{base_url}/collections/{collectionId}/items",
+    #                     "rel": "items",
+    #                     "type": "application/geo+json", 
+    #                     "title": "Moving features as GeoJSON"
+    #                 }
+    #             ],
+    #             "itemType": "movingfeature",  # Mandatory fixed value
+    #             # "extent": {...},  # Optional - you'd need to calculate this
+    #             # "updateFrequency": 1000  # Optional - you'd need to store this
+    #         }
 
-    def do_delete_collection(self, collectionId):
-        try:
-            cursor.execute("DROP TABLE IF EXISTS public.%s" % collectionId)
-            connection.commit()
-            self.send_response(204)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-        except Exception as e:
-            self.handle_error(500, str(e))
+    #         # Send response
+    #         self.send_response(200)
+    #         self.send_header("Content-type", "application/json")
+    #         self.end_headers()
+    #         self.wfile.write(json.dumps(collection_metadata).encode('utf-8'))
+            
+        # except Exception as e:
+        #     self.handle_error(404 if 'does not exist' in str(e) else 500,
+        #                     'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
+
+    def do_delete_collection(self,collectionId,connection, cursor ):
+        do_delete_collection(self,collectionId,connection, cursor)
+
 
     def do_put_collection(self, collectionId):
         content_length = int(self.headers['Content-Length'])
