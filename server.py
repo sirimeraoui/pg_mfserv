@@ -334,32 +334,48 @@ class MyServer(BaseHTTPRequestHandler):
             self.handle_error(400, str(e))
 
     def do_post_collection_items(self, collectionId):
-
         try:
-            content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
+            content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-            print("POST request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
+            print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" %
+                (self.path, self.headers, post_data.decode('utf-8')))
 
-            data_dict = json.loads(post_data.decode('utf-8'))
-            feat_id = data_dict.get("id")
-            tempGeo = data_dict.get("temporalGeometry")
+            # list of features
+            features_list = json.loads(post_data.decode('utf-8'))
+            if not isinstance(features_list, list):
+                features_list = [features_list]  # wrap single feature into list
 
-            if tempGeo is None:
-               raise Exception("DataError")
+            for feature in features_list:
+                feat_id = feature.get("id")
+                tempGeo = feature.get("temporalGeometry")
 
-            tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
+                if tempGeo is None:
+                    print(f"Skipping feature {feat_id}: no temporalGeometry")
+                    continue  # skip invalid feature
 
-            string_query = f"INSERT INTO public.{collectionId} VALUES({feat_id}, '{tGeomPoint}');"
+                try:
+                    # Validate and convert to TGeomPoint
+                    tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
 
-            cursor.execute(string_query)
-            connection.commit()
+                    # Insert into the collection
+                    sql_query = f"INSERT INTO public.{collectionId} VALUES({feat_id}, '{tGeomPoint}')"
+                    cursor.execute(sql_query)
+                    connection.commit()
+                    print(f"Successfully inserted feature {feat_id}")
 
+                except Exception as e:
+                    connection.rollback()
+                    print(f"Skipping feature {feat_id} due to error: {e}")
+
+           
             self.send_response(200)
             self.send_header("Content-type", "application/json")
             self.end_headers()
+            self.wfile.write(bytes(json.dumps({"status": "done"}), "utf-8"))
 
         except Exception as e:
-            self.handle_error(400 if "DataError" in str(e) else 404 if "does not exist" in str(e) else 500, str(e))
+            self.handle_error(400 if "DataError" in str(e) else 500, str(e))
+
 
     def do_add_movement_data_in_mf(self, collectionId, featureId):
         columns = column_discovery(collectionId, cursor)
