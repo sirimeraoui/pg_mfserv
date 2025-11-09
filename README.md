@@ -54,3 +54,6 @@ poetry install
 
 
 
+root@hafsa:/mnt/c/Users/sirine/OneDrive/Desktop/pg_mfserv# curl http://localhost:8080/collections
+{"collections": [
+    {"id": "spatial_ref_sys", "title": "spatial_ref_sys", "links": [{"href": "http://localhost:8080/collections/spatial_ref_sys", "rel": "self", "type": "application/json"}]}, {"id": "mobilitydb_opcache", "title": "mobilitydb_opcache", "links": [{"href": "http://localhost:8080/collections/mobilitydb_opcache", "rel": "self", "type": "application/json"}]}], "links": [{"href": "http://localhost:8080/collections", "rel": "self", "type": "application/json"}]}

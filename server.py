@@ -122,18 +122,39 @@ class MyServer(BaseHTTPRequestHandler):
     def do_collections(self):
         try:
             cursor.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';")
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
+            )
             fetched_collections = cursor.fetchall()
-            # Construct the JSON data
-            collections = [{'collection': row} for row in fetched_collections]
-            json_data = json.dumps(collections)
 
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(json_data, "utf-8"))
+            base_url = f"http://{hostName}:{serverPort}"
+
+            collections_list = []
+            for (table_name,) in fetched_collections:
+                collections_list.append({
+                    "id": table_name,
+                    "title": table_name,
+                    "links": [
+                        {
+                            "href": f"{base_url}/collections/{table_name}",
+                            "rel": "self",
+                            "type": "application/json"
+                        }
+                    ]
+                })
+
+            response = {
+                "collections": collections_list,
+                "links": [
+                    {"href": f"{base_url}/collections", "rel": "self", "type": "application/json"}
+                ]
+            }
+
+            json_data = json.dumps(response)
+            send_json_response(self, 200, json_data)
+
         except Exception as e:
-            self.handle_error(500, 'Internal server error')
+            self.handle_error(500, f"Internal server error: {str(e)}")
+
 
     def do_post_collection(self):
         try:
