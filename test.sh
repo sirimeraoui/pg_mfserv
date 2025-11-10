@@ -25,4 +25,4 @@ curl -i -X POST http://$hostName:$serverPort/collections \
 # REQUIREMENT 1
 # IDENTIFIER
 # /req/mf-collection/collections-get
-# curl http://localhost:8080/collectionss
+# curl http://localhost:8080/collections

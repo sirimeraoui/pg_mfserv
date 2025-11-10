@@ -24,39 +24,39 @@ password = 'mysecretpassword'
 
 def get_collections(self,connection,cursor):
         try:
-            cursor.execute(
-                "SELECT tablee FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
-            )
+            cursor.execute("SELECT * FROM collections_metadata;")
             fetched_collections = cursor.fetchall()
-            print("resutlssssss:")
-            print(fetched_collections)
             base_url = f"http://{hostName}:{serverPort}"
+            columns = [desc[0] for desc in cursor.description]
+            # Convert rows to dicts
+            collections = [dict(zip(columns, row)) for row in fetched_collections ]
+            # print("collections dict", collections)
+            collections_list = []
+            for _ in collections:
+                collections_list.append({
+                    "id": _["id"],
+                    "title": _["title"],
+                    "updatefrequency":_["updatefrequency"],
+                    "description":_["description"],
+                    "itemtype":_["itemtype"],
+                    "links": [
+                        {"href": f"{base_url}/collections/{ _["title"]}","rel": "self","type": "application/json"}
+                        #, {"href": "http://localhost:8080/collections/<collection id>/schema","rel": "[ogc-rel:schema]","type": "application/schema+json"}
+                        ]
+                })
 
-            # collections_list = []
-            # for (table_name,) in fetched_collections:
-            #     collections_list.append({
-            #         "id": table_name,
-            #         "title": table_name,
-            #         "links": [
-            #             {
-            #                 "href": f"{base_url}/collections/{table_name}",
-            #                 "rel": "self",
-            #                 "type": "application/json"
-            #             }
-            #         ]
-            #     })
-
-            # response = {
-            #     "links": [
-            #         {"href": f"{base_url}/collections", "rel": "self", "type": "application/json"}
-            #     ],
-            #     "collections": collections_list,
-            # }
-            json_data = json.dumps({"hello":"world"})
-            # json_data = json.dumps(response)
+            response = {
+                "links": [
+                    {"href": f"{base_url}/collections", "rel": "self", "type": "application/json"}
+                    #, {"href": "http://localhost:8080/collections.html", "rel": "alternate","type": "text/html"}
+                ],
+                "collections": collections_list,
+            }
+            json_data = json.dumps(response)
             send_json_response(self, 200, json_data)
 
         except Exception as e:
+            # print("error: ", e)
             self.handle_error(500, f"Internal server error: {str(e)}")
 
 # based on the following JSON Schema 
@@ -85,7 +85,7 @@ def get_collections(self,connection,cursor):
 #       $ref: 'collectionDesc.yaml'
 
 
-
+# example:
 # {
 #   "links": [
 #     {

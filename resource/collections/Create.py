@@ -25,8 +25,8 @@ def post_collections(self,connection,cursor):
     try:
         content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
         post_data = self.rfile.read(content_length)  # <--- Gets the data itself
-        print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" % (
-            self.path, self.headers, post_data.decode('utf-8')))
+        # print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" % (
+        #     self.path, self.headers, post_data.decode('utf-8')))
         data_dict = json.loads(post_data.decode('utf-8'))
     #     expected_types = {
     #         "title": str,
@@ -43,20 +43,38 @@ def post_collections(self,connection,cursor):
         if "itemType" not in data_dict or not data_dict["itemType"]:
             data_dict["itemType"] = "movingfeature"
         # print("All fields have correct types")
-        cursor.execute("SELECT id FROM collections_metadata WHERE title = %s", ( data_dict["title"] ,))
-        exists = cursor.fetchone()
-        if(exists):
-            self.handle_error(409, f'Collection {data_dict["title"]} already exists.')
-            # return   
-        else: 
-            cursor.execute(sql.SQL("""
+        cursor.execute(sql.SQL("""
                 CREATE TABLE IF NOT EXISTS collections_metadata (
-                    id SERIAL PRIMARY KEY,
+                    id TEXT PRIMARY KEY,
                     title TEXT,
                     updateFrequency INTEGER,
                     description TEXT,
                     itemType TEXT) """))
-            cursor.execute("INSERT INTO  collections_metadata VALUES(DEFAULT, %s,%s,%s,%s)",(data_dict["title"], data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
+        connection.commit()
+        table_name = data_dict["title"].lower()
+        cursor.execute("SELECT id FROM collections_metadata WHERE title = %s", ( table_name.replace("'", "")  ,))
+            
+        exists = cursor.fetchone()
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 
+                FROM information_schema.tables 
+                WHERE table_schema='public' AND table_name=%s
+            )
+        """, (table_name,))
+        table_exists = cursor.fetchone()[0]
+        exists = exists and table_exists
+
+        if(exists):
+            self.handle_error(409, f'Collection {data_dict["title"]} already exists.')
+            # return   
+        else: 
+            cursor.execute("INSERT INTO  collections_metadata VALUES(%s, %s,%s,%s,%s)",(data_dict["title"].lower(),data_dict["title"].lower(), data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
+            cursor.execute(
+                sql.SQL("CREATE TABLE IF NOT EXISTS {} (id SERIAL PRIMARY KEY)").format(
+                    sql.Identifier(table_name)
+                )
+            )
 
             connection.commit()
 

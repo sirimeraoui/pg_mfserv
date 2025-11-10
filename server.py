@@ -1,13 +1,12 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from utils import column_discovery, send_json_response, column_discovery2
+from utils import column_discovery, send_json_response, column_discovery2, handle_error
 from pymeos.db.psycopg2 import MobilityDB
 from psycopg2 import sql
 import json
 from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
 from resource.Collection import do_collection_id,do_delete_collection
-
 from resource.MovingFeatures import do_get_collection_items, do_post_collection_items
 from resource.collections.Create import post_collections
 from resource.collections.Retrieve import get_collections
@@ -105,16 +104,6 @@ class MyServer(BaseHTTPRequestHandler):
             collection_id = self.path.split('/')[-1]
             self.do_put_collection(collection_id)
 
-    def handle_error(self,code, message):
-        # Format error information into a JSON string
-        error_response = json.dumps({"code": str(code), "description": message})
-
-        # Send the JSON response
-        self.send_response(code)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(bytes(error_response, "utf-8"))
-
     def do_home(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -126,6 +115,9 @@ class MyServer(BaseHTTPRequestHandler):
     # # Get all collections 
     def get_collections(self,connection,cursor):
         get_collections(self,connection,cursor)
+    # cleanup later
+    def handle_error(self,code, message):
+        handle_error(self,code, message)
     # def get_collections(self):
     #     try:
     #         cursor.execute(

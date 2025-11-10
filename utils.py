@@ -17,3 +17,12 @@ def send_json_response(self,status_code, json_data):
     self.send_header("Content-type", "application/json")
     self.end_headers()
     self.wfile.write(json_data.encode('utf-8'))
+def handle_error(self,code, message):
+    # Format error information into a JSON string
+    error_response = json.dumps({"code": str(code), "description": message})
+
+    # Send the JSON response
+    self.send_response(code)
+    self.send_header("Content-type", "application/json")
+    self.end_headers()
+    self.wfile.write(error_response.encode("utf-8"))
