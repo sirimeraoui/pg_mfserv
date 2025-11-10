@@ -6,9 +6,11 @@ from psycopg2 import sql
 import json
 from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
-from resource.Collection import do_collection_id, do_post_collection,do_delete_collection
-from resource.Collections import do_collections
+from resource.Collection import do_collection_id,do_delete_collection
+
 from resource.MovingFeatures import do_get_collection_items, do_post_collection_items
+from resource.collections.Create import post_collections
+from resource.collections.Retrieve import get_collections
 pymeos_initialize()
 
 hostName = "localhost"
@@ -33,7 +35,7 @@ class MyServer(BaseHTTPRequestHandler):
         elif self.path == '/':
             self.do_home()
         elif self.path == '/collections':
-            self.do_collections(connection,cursor)
+            self.get_collections(connection,cursor)
         elif self.path.startswith('/collections') and '/items/' in self.path:
             collectionId = self.path.split('/')[2]
             feature_id = self.path.split('/')[-1]
@@ -67,7 +69,7 @@ class MyServer(BaseHTTPRequestHandler):
         if 'tgsequence' in self.path:
             self.do_post_sequence()
         elif self.path == '/collections':
-            self.do_post_collection(connection,cursor)
+            self.post_collections(connection,cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[2]
             self.do_post_collection_items(collection_id,connection, cursor)
@@ -122,9 +124,9 @@ class MyServer(BaseHTTPRequestHandler):
 
     # # OGC COMPLIANT
     # # Get all collections 
-    def do_collections(self,connection,cursor):
-        do_collections(self,connection,cursor)
-    # def do_collections(self):
+    def get_collections(self,connection,cursor):
+        get_collections(self,connection,cursor)
+    # def get_collections(self):
     #     try:
     #         cursor.execute(
     #             "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE';"
@@ -160,10 +162,10 @@ class MyServer(BaseHTTPRequestHandler):
     #     except Exception as e:
     #         self.handle_error(500, f"Internal server error: {str(e)}")
 
-    def do_post_collection(self,connection,cursor):
-        do_post_collection(self,connection,cursor)
+    def post_collections(self,connection,cursor):
+        post_collections(self,connection,cursor)
 
-    # def do_post_collection(self):
+    # def post_collections(self):
     #     try:
     #         content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
     #         post_data = self.rfile.read(content_length)  # <--- Gets the data itself

@@ -5,7 +5,7 @@ from utils import column_discovery, send_json_response, column_discovery2
 from pymeos.db.psycopg2 import MobilityDB
 from psycopg2 import sql
 import json
-from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
+from pymeos import *
 from urllib.parse import urlparse, parse_qs
 
 
@@ -19,7 +19,7 @@ user = 'postgres'
 password = 'mysecretpassword'
 
 # CREATE
-def do_post_collection_items(self, collectionId,connection, cursor):
+def do_post_collection_items(self, collectionId, connection, cursor):
     try:
         # Read request body
         content_length = int(self.headers['Content-Length'])
@@ -38,29 +38,34 @@ def do_post_collection_items(self, collectionId,connection, cursor):
             tempGeo = feature.get("temporalGeometry")
 
             if tempGeo is None:
-                continue  # skip invalid feature
+                print(f"Skipping feature {feat_id}: missing temporalGeometry")
+                continue
 
             try:
-                # Convert MF-JSON to TGeomPoint
-                tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
-
-                # Insert into DB (assumes 'trip' column exists for temporal geometry)
-                sql_query = f"INSERT INTO public.{collectionId} (id, trip) VALUES (%s, %s)"
-                cursor.execute(sql_query, (feat_id, tGeomPoint))
+                # Store as JSON (OGC MF-JSON representation)
+                sql_query = f"""
+                    INSERT INTO public.{collectionId} (id, temporalgeometry)
+                    VALUES (%s, %s::jsonb)
+                """
+                cursor.execute(sql_query, (feat_id, json.dumps(tempGeo)))
                 connection.commit()
 
-                # Build resource URI
+                # Add the feature URI for response
                 new_locations.append(f"{base_url}/collections/{collectionId}/items/{feat_id}")
 
             except Exception as e:
                 connection.rollback()
                 print(f"Skipping feature {feat_id} due to error: {e}")
 
-        # OGC-compliant response
+        # OGC-compliant response: 201 Created
         self.send_response(201)
-        self.send_header("Content-type", "application/geo+json")  # MF-JSON compliant
+        self.send_header("Content-type", "application/geo+json")
         self.end_headers()
-        response_body = {"type": "FeatureCollection", "features": new_locations}
+
+        response_body = {
+            "type": "FeatureCollection",
+            "features": [{"href": uri, "rel": "item"} for uri in new_locations]
+        }
         self.wfile.write(bytes(json.dumps(response_body), "utf-8"))
 
     except Exception as e:
