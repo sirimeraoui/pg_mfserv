@@ -4,14 +4,14 @@ hostName="localhost"
 serverPort=8080
 
 # OGC TEST POST COLLECTIONS:
-# curl -X POST http://$hostName:$serverPort/collections \
-#      -H "Content-Type: application/json" \
-#      -d '{
-#            "title": "Ships",
-#            "updateFrequency": 1000,
-#            "description": "a collection of moving features to manage data in a distinct (physical or logical) space",
-#            "itemType": "movingfeature"
-#          }'
+curl -X POST http://$hostName:$serverPort/collections \
+     -H "Content-Type: application/json" \
+     -d '{
+           "title": "Ships",
+           "updateFrequency": 1000,
+           "description": "a collection of moving features to manage data in a distinct (physical or logical) space",
+           "itemType": "movingfeature"
+         }'
 # curl -i -X POST http://$hostName:$serverPort/collections \
 #      -H "Content-Type: application/json" \
 #      -d '{
@@ -26,7 +26,13 @@ serverPort=8080
 # IDENTIFIER
 # /req/mf-collection/collections-get
 # curl http://localhost:8080/collections
+# ____________________________________________Source Collection__________________________________________________________________
 #REQUIREMENT 6: OPERATION 
 #IDENTIFIER /req/mf-collection/collection-get
 # curl http://localhost:8080/collections/ships
-curl "http://localhost:8080/collections/ships?fields=id"
+# curl "http://localhost:8080/collections/ships?fields=id"
+
+# REQUIREMENT 8 OPERATION p33
+# IDENTIFIER /req/mf-collection/collection-delete
+# curl -i -X DELETE http://localhost:8080/collections/ships
+

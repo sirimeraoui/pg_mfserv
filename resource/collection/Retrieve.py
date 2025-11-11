@@ -59,7 +59,6 @@ def get_collection_id(self, collectionId,connection,cursor):
 
         # Convert rows to dicts
         collection= dict(zip(columns, r))
-        print("the dictionar of collection is: ", collection)
         # Convert fetched data to JSON
         res = {
             "id": collection["id"],
@@ -79,8 +78,6 @@ def get_collection_id(self, collectionId,connection,cursor):
             "links": [ { "href": f"https://data.example.org/collections/{collectionId}", "rel": "self", "type": "application/json" } ]
         }
         query_params = parse_qs(urlparse(self.path).query)
-        print("qeuryr params ", query_params)
-        print('fjffjfj')
         fields_param = query_params.get("fields", [None])[0]
         required_fields = ["id", "itemType", "links"]
         
@@ -102,7 +99,7 @@ def get_collection_id(self, collectionId,connection,cursor):
         self.wfile.write(res.encode('utf-8'))
     except Exception as e:
         # Handle any exceptions
-        print("error",e)
+        # print("error",e)
         self.handle_error(404 if 'does not exist' in str(e) else 500,
                             'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
 

@@ -28,6 +28,7 @@ cursor = connection.cursor()
 
 
 class MyServer(BaseHTTPRequestHandler):
+    # protocol_version = "HTTP/1.1"
     def do_GET(self):
         if 'tgsequence' in self.path:
             self.do_get_squence()
