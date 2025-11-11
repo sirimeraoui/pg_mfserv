@@ -11,7 +11,7 @@ from resource.collections.Create import post_collections
 from resource.collections.Retrieve import get_collections
 from resource.collection.Retrieve import get_collection_id
 from resource.collection.Delete import delete_collection
-from resource.collection.Put import put_collection
+from resource.collection.Replace import put_collection
 pymeos_initialize()
 
 hostName = "localhost"
@@ -109,7 +109,7 @@ class MyServer(BaseHTTPRequestHandler):
     def do_PUT(self):
         if self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[-1]
-            self.do_put_collection(collection_id)
+            self.put_collection(collection_id,connection,cursor)
 
     def do_home(self):
         self.send_response(200)

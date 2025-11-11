@@ -60,7 +60,7 @@ def delete_collection(self, collectionId,connection, cursor):
         self.send_response_only(204, "OK")
         self.end_headers()
     except Exception as e:
-        print("eee",e)
+        # print("eee",e)
         self.handle_error(500, str(e))
 
 
