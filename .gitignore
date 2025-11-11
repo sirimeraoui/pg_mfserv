@@ -2,7 +2,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-notes.md
 # C extensions
 *.so
 poetry.lock
@@ -162,3 +161,7 @@ cython_debug/
 #.idea/
 
 *.zip
+
+#developement
+notes.md
+debug.md

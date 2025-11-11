@@ -1,6 +1,6 @@
-# REQUIREMENT 1
+# REQUIREMENT 1 OPERATION
 # IDENTIFIER /req/mf-collection/collections-get
-
+# REQUIREMENT 3 RESPONSE
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from utils import column_discovery, send_json_response, column_discovery2
@@ -36,9 +36,18 @@ def get_collections(self,connection,cursor):
                 collections_list.append({
                     "id": _["id"],
                     "title": _["title"],
-                    "updatefrequency":_["updatefrequency"],
+                    "updateFrequency":_["updatefrequency"],
                     "description":_["description"],
-                    "itemtype":_["itemtype"],
+                    "itemType":_["itemtype"],
+                    "extent": { 
+                        "spatial": { 
+                            "bbox": [ -180, -90, 190, 90 ],
+                            "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"]
+                            }, 
+                        "temporal": {
+                            "interval": [ "2011-11-11T12:22:11Z","2012-11-24T12:32:43Z" ],
+                            "trs": ["http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"]
+                            }},
                     "links": [
                         {"href": f"{base_url}/collections/{ _["title"]}","rel": "self","type": "application/json"}
                         #, {"href": "http://localhost:8080/collections/<collection id>/schema","rel": "[ogc-rel:schema]","type": "application/schema+json"}
@@ -86,39 +95,18 @@ def get_collections(self,connection,cursor):
 
 
 # example:
-# {
-#   "links": [
-#     {
-#       "href": "http://localhost:8080/collections",
-#       "rel": "self",
-#       "type": "application/json"
-#     },
-#     {
-#       "href": "http://localhost:8080/collections.html",
-#       "rel": "alternate",
-#       "type": "text/html"
-#     }
-#   ],
-#   "collections": [
-#     {
-#       "id": "<collection id>",
-#       "title": "<collection title>",
-        # "updateFrequency": 1000,
-#       "description": "<collection description>",
-#       "itemType": "<itemType>",
-#       "links": [
-#         {
-#           "href": "http://localhost:8080/collections/<collection id>",
-#           "rel": "self",
-#           "type": "application/json"
-#         },
-#         {
-#           "href": "http://localhost:8080/collections/<collection id>/schema",
-#           "rel": "[ogc-rel:schema]",
-#           "type": "application/schema+json"
-#         }
-#       ]
-#     }
-#   ]
-# }
-
+# Json_payload = { "collections": 
+# [ 
+#     { "id": "mfc-1", 
+#     "title": "MovingFeatureCollection_1", 
+#     "description": "a collection of moving features to manage data in a distinct (physical or logical) space",
+#      "itemType": "movingfeature", 
+#      "updateFrequency": 1000, 
+#      "extent": { "spatial":{
+#         "bbox": [ -180, -90, 190, 90 ], 
+#         "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84" }, 
+#        "temporal": { 
+#         "interval": [ "2011-11-11T12:22:11Z","2012-11-24T12:32:43Z" ],
+#         "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian" } },
+# "links": [ { "href": "https://data.example.org/collections/mfc-1", "rel": "self", "type": "application/json" } ] } ], "links": [ { "href": "https://data.example.org/collections", "rel": "self", "type": "application/json" } ]}
+# Listing 4 — An Example of a Collections JSON Payload:

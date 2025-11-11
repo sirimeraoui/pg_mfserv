@@ -6,10 +6,12 @@ from psycopg2 import sql
 import json
 from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
 from urllib.parse import urlparse, parse_qs
-from resource.Collection import do_collection_id,do_delete_collection
 from resource.MovingFeatures import do_get_collection_items, do_post_collection_items
 from resource.collections.Create import post_collections
 from resource.collections.Retrieve import get_collections
+from resource.collection.Retrieve import get_collection_id
+from resource.collection.Delete import delete_collection
+from resource.collection.Put import put_collection
 pymeos_initialize()
 
 hostName = "localhost"
@@ -44,9 +46,13 @@ class MyServer(BaseHTTPRequestHandler):
             collection_id = self.path.split('/')[2]
             self.do_get_collection_items(collection_id,connection, cursor)
         elif self.path.startswith('/collections/'):
-            # Extract collection ID from the path
-            collection_id = self.path.split('/')[-1]
-            self.do_collection_id(collection_id,connection, cursor)
+            # Extract only the path part without query parameters
+            path_only = urlparse(self.path).path
+            collection_id = path_only.split('/')[-1]  # e.g., 'ships'
+            self.get_collection_id(collection_id, connection, cursor)
+
+
+            
 
     def do_get_squence(self):
         collection_id = self.path.split('/')[2]
@@ -84,7 +90,7 @@ class MyServer(BaseHTTPRequestHandler):
             self.do_delete_sequence()
         elif self.path.startswith('/collections/') and 'items' not in self.path:
             collection_id = self.path.split('/')[-1]
-            self.do_delete_collection(collection_id,connection, cursor)
+            self.delete_collection(collection_id,connection, cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             # Extract collection ID and mFeatureId from the path
             components = self.path.split('/')
@@ -180,85 +186,18 @@ class MyServer(BaseHTTPRequestHandler):
     #         self.wfile.write(bytes(post_data.decode('utf-8'), "utf-8"))
     #     except Exception as e:
     #         self.handle_error(500, 'Internal server error')
-
-    def do_collection_id(self, collectionId,connection,cusor):
-        do_collection_id(self, collectionId,connection,cursor)
-
-    # def do_collection_id(self, collectionId):
-    #     try:
-    #         # First verify the collection exists
-    #         cursor.execute("""
-    #             SELECT EXISTS (
-    #                 SELECT FROM information_schema.tables 
-    #                 WHERE table_schema = 'public' 
-    #                 AND table_name = %s
-    #             );
-    #         """, (collectionId,))
-            
-    #         if not cursor.fetchone()[0]:
-    #             self.handle_error(404, 'Collection not found')
-    #             return
-
-    #         # Get collection metadata - you'll need to store this somewhere
-    #         # For now, creating a minimal compliant response
-    #         base_url = f"http://{hostName}:{serverPort}"
-            
-    #         collection_metadata = {
-    #             "id": collectionId,
-    #             "title": collectionId,  # You should store proper titles
-    #             "description": f"Collection of moving features: {collectionId}",
-    #             "links": [
-    #                 {
-    #                     "href": f"{base_url}/collections/{collectionId}",
-    #                     "rel": "self",
-    #                     "type": "application/json",
-    #                     "title": "This document"
-    #                 },
-    #                 {
-    #                     "href": f"{base_url}/collections/{collectionId}/items",
-    #                     "rel": "items",
-    #                     "type": "application/geo+json", 
-    #                     "title": "Moving features as GeoJSON"
-    #                 }
-    #             ],
-    #             "itemType": "movingfeature",  # Mandatory fixed value
-    #             # "extent": {...},  # Optional - you'd need to calculate this
-    #             # "updateFrequency": 1000  # Optional - you'd need to store this
-    #         }
-
-    #         # Send response
-    #         self.send_response(200)
-    #         self.send_header("Content-type", "application/json")
-    #         self.end_headers()
-    #         self.wfile.write(json.dumps(collection_metadata).encode('utf-8'))
-            
-        # except Exception as e:
-        #     self.handle_error(404 if 'does not exist' in str(e) else 500,
-        #                     'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
-
-    def do_delete_collection(self,collectionId,connection, cursor ):
-        do_delete_collection(self,collectionId,connection, cursor)
+# ________________________________Resource Collection_______________________________
+    def get_collection_id(self, collectionId,connection,cusor):
+        get_collection_id(self, collectionId,connection,cursor)
 
 
-    def do_put_collection(self, collectionId):
-        content_length = int(self.headers['Content-Length'])
-        put_data = self.rfile.read(content_length)
+    def delete_collection(self,collectionId,connection, cursor ):
+        delete_collection(self,collectionId,connection, cursor)
 
-        try:
-            data_dict = json.loads(put_data)
-            collectionId = collectionId.replace("'", "")
 
-            cursor.execute(sql.SQL("UPDATE public.{table} SET title=%s, description=%s, itemtype=%s").format(
-                table=sql.Identifier(collectionId)),
-                (data_dict.get('title'), data_dict.get('description'), data_dict.get('itemType')))
-            connection.commit()
-            # Rows were updated successfully
-            self.send_response(204)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-        except Exception as e:
-            self.handle_error(404 if 'does not exist' in str(e) else 500,
-                              'no collection was found' if 'does not exist' in str(e) else 'Server internal error')
+    def put_collection(self, collectionId, connection, cursor):
+        put_collection(self, collectionId, connection, cursor)
+ #__________________________________________________________________________________________
 
     def do_get_collection_items(self, collectionId, connection, cursor):
         do_get_collection_items(self, collectionId,connection, cursor)

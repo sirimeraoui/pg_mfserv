@@ -70,7 +70,7 @@ def do_post_collection(self,connection, cursor):
 
 
 # GET
-def do_collection_id(self, collectionId,connection,cursor):
+def _collection_id(self, collectionId,connection,cursor):
     try:
         # Verify collection exists
         cursor.execute("""
