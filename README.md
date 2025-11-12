@@ -15,7 +15,7 @@ This Python API server provides endpoints for interacting with MobilityDB, a tem
 - Provides endpoints for managing data stored in MobilityDB.
 
 ## Prerequisites
-
+- Linux (ubuntu)
 - A recent version of Pyhton
 - A MobilityDB running locally or on a server
 
@@ -26,8 +26,7 @@ To install and run the server, follow these steps:
 1. Download the server.py and utils.py file in the same folder.
 2. Dowload the rest-clients and change the queries to match your MOBILITYDB collections.
 3. Change the connection parameters in the server.py file.
-4. Install [PyMEOS](https://github.com/MobilityDB/PyMEOS)
-5. Run the server :
+4. Install [PyMEOS](https://github.com/MobilityDB/PyMEOS) 
     ```bash
     python3 server.py
 6. Enjoy !
@@ -54,6 +53,3 @@ poetry install
 
 
 
-root@hafsa:/mnt/c/Users/sirine/OneDrive/Desktop/pg_mfserv# curl http://localhost:8080/collections
-{"collections": [
-    {"id": "spatial_ref_sys", "title": "spatial_ref_sys", "links": [{"href": "http://localhost:8080/collections/spatial_ref_sys", "rel": "self", "type": "application/json"}]}, {"id": "mobilitydb_opcache", "title": "mobilitydb_opcache", "links": [{"href": "http://localhost:8080/collections/mobilitydb_opcache", "rel": "self", "type": "application/json"}]}], "links": [{"href": "http://localhost:8080/collections", "rel": "self", "type": "application/json"}]}

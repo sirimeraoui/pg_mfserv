@@ -333,7 +333,7 @@ class MyServer(BaseHTTPRequestHandler):
             print(str(e))
             self.handle_error(400, str(e))
 
-    def do_post_collection_items(self, collectionId):
+    def do_post_collection_items(self, collectionId, connection, cursor):
 
         try:
             content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data

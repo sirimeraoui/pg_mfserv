@@ -52,7 +52,7 @@ def post_collections(self,connection,cursor):
                     itemType TEXT) """))
         connection.commit()
         table_name = data_dict["title"].lower()
-        cursor.execute("SELECT id FROM collections_metadata WHERE title = %s", ( table_name.replace("'", "")  ,))
+        cursor.execute("SELECT id FROM collections_metadata WHERE id = %s", ( table_name.replace("'", "")  ,))
             
         exists = cursor.fetchone()
         cursor.execute("""
@@ -67,7 +67,7 @@ def post_collections(self,connection,cursor):
 
         if(exists):
             self.handle_error(409, f'Collection {data_dict["title"]} already exists.')
-            # return   
+            return   
         else: 
             cursor.execute("INSERT INTO  collections_metadata VALUES(%s, %s,%s,%s,%s)",(data_dict["title"].lower(),data_dict["title"].lower(), data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
             cursor.execute(
