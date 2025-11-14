@@ -71,7 +71,7 @@ def post_collections(self,connection,cursor):
         else: 
             cursor.execute("INSERT INTO  collections_metadata VALUES(%s, %s,%s,%s,%s)",(data_dict["title"].lower(),data_dict["title"].lower(), data_dict["updateFrequency"], data_dict["description"], data_dict["itemType"]))
             cursor.execute(
-                sql.SQL("CREATE TABLE IF NOT EXISTS {} (id SERIAL PRIMARY KEY)").format(
+                sql.SQL("CREATE TABLE IF NOT EXISTS {} (id TEXT PRIMARY KEY)").format(
                     sql.Identifier(table_name)
                 )
             )

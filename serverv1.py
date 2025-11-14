@@ -18,7 +18,8 @@ db = 'postgres'
 user = 'postgres'
 password = 'postgres'
 
-connection = MobilityDB.connect(host=host, port=port, database=db, user=user, password=password)
+connection = MobilityDB.connect(
+    host=host, port=port, database=db, user=user, password=password)
 cursor = connection.cursor()
 
 
@@ -55,10 +56,11 @@ class MyServer(BaseHTTPRequestHandler):
         feature_id = self.path.split('/')[4]
 
         if self.path.endswith("/tproperties"):
-            self.do_get_set_temporal_data(collection_id,feature_id)
+            self.do_get_set_temporal_data(collection_id, feature_id)
         else:
             tpropertyname = self.path.split('/')[6]
-            self.do_get_temporal_property(collection_id, feature_id, tpropertyname)
+            self.do_get_temporal_property(
+                collection_id, feature_id, tpropertyname)
 
     # POST requests router
     def do_POST(self):
@@ -94,16 +96,18 @@ class MyServer(BaseHTTPRequestHandler):
         collection_id = components[2]
         mfeature_id = components[4]
         tGeometry_id = self.path.split('/')[6]
-        self.do_delete_single_temporal_primitive_geo(collection_id, mfeature_id, tGeometry_id)
+        self.do_delete_single_temporal_primitive_geo(
+            collection_id, mfeature_id, tGeometry_id)
 
     def do_PUT(self):
         if self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[-1]
             self.do_put_collection(collection_id)
 
-    def handle_error(self,code, message):
+    def handle_error(self, code, message):
         # Format error information into a JSON string
-        error_response = json.dumps({"code": str(code), "description": message})
+        error_response = json.dumps(
+            {"code": str(code), "description": message})
 
         # Send the JSON response
         self.send_response(code)
@@ -137,15 +141,18 @@ class MyServer(BaseHTTPRequestHandler):
 
     def do_post_collection(self):
         try:
-            content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
-            post_data = self.rfile.read(content_length)  # <--- Gets the data itself
+            # <--- Gets the size of data
+            content_length = int(self.headers['Content-Length'])
+            # <--- Gets the data itself
+            post_data = self.rfile.read(content_length)
             print("POST request,\nPath: %s\nHeaders: %s\n\nBody: %s\n" % (
                 self.path, self.headers, post_data.decode('utf-8')))
 
             data_dict = json.loads(post_data.decode('utf-8'))
             title_lower = data_dict["title"].lower().replace(" ", "_")
 
-            cursor.execute(sql.SQL("DROP TABLE IF EXISTS public.{table}").format(table=sql.Identifier(title_lower)))
+            cursor.execute(sql.SQL("DROP TABLE IF EXISTS public.{table}").format(
+                table=sql.Identifier(title_lower)))
             cursor.execute(sql.SQL(
                 "CREATE TABLE public.{table} (id SERIAL PRIMARY KEY, title TEXT, updateFrequency integer, description TEXT, itemType TEXT)").format(
                 table=sql.Identifier(title_lower)))
@@ -161,7 +168,8 @@ class MyServer(BaseHTTPRequestHandler):
 
     def do_collection_id(self, collectionId):
         try:
-            cursor.execute(sql.SQL("SELECT * FROM public.{table};").format(table=sql.Identifier(collectionId)))
+            cursor.execute(sql.SQL(
+                "SELECT * FROM public.{table};").format(table=sql.Identifier(collectionId)))
             r = cursor.fetchall()
 
             # Convert fetched data to JSON
@@ -210,15 +218,17 @@ class MyServer(BaseHTTPRequestHandler):
     def do_get_collection_items(self, collectionId):
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
-        limit = 10 if query_params.get('limit') is None else query_params.get('limit')[0]
-        x1, y1, x2, y2 = query_params.get('x1')[0], query_params.get('y1')[0], query_params.get('x2')[0], query_params.get('y2')[0]
+        limit = 10 if query_params.get(
+            'limit') is None else query_params.get('limit')[0]
+        x1, y1, x2, y2 = query_params.get('x1')[0], query_params.get(
+            'y1')[0], query_params.get('x2')[0], query_params.get('y2')[0]
         subTrajectory = query_params.get('subTrajectory')[0]
         dateTime = query_params.get('dateTime')
 
         dateTime1 = dateTime[0].split(',')[0]
         dateTime2 = dateTime[0].split(',')[1]
 
-        columns = column_discovery(collectionId,cursor)
+        columns = column_discovery(collectionId, cursor)
         id = columns[0][0]
         trip = columns[1][0]
 
@@ -242,7 +252,8 @@ class MyServer(BaseHTTPRequestHandler):
             print(feature)
             tPoint = TGeomPoint.from_mfjson(json.dumps(feature))
             bbox = tPoint.bounding_box()
-            feature["bbox"] = [bbox.xmin(), bbox.ymin(), bbox.xmax(), bbox.ymax()]
+            feature["bbox"] = [bbox.xmin(), bbox.ymin(),
+                               bbox.xmax(), bbox.ymax()]
             feature["id"] = row[0]
             feature.pop("datetimes", None)
             features.append(feature)
@@ -261,10 +272,11 @@ class MyServer(BaseHTTPRequestHandler):
         geojson_string = json.dumps(geojson_data)
 
         # Define the coordinates of the polygon's vertices
-        send_json_response(self,200, geojson_string)
+        send_json_response(self, 200, geojson_string)
 
     def do_get_meta_data(self, collectionId, featureId):
-        print("GET request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
+        print("GET request,\nPath: %s\nHeaders: %s\n" %
+              (self.path, self.headers))
         columns = column_discovery(collectionId, cursor)
         id = columns[0][0]
         trip = columns[1][0]
@@ -281,7 +293,7 @@ class MyServer(BaseHTTPRequestHandler):
 
             json_data = json.dumps(data)
 
-            send_json_response(self,200,json_data)
+            send_json_response(self, 200, json_data)
 
         except Exception as e:
             self.handle_error(404 if "does not exist" in str(e) else 500,
@@ -295,9 +307,11 @@ class MyServer(BaseHTTPRequestHandler):
         try:
             parsed_url = urlparse(self.path)
             query_params = parse_qs(parsed_url.query)
-            limit = 10 if query_params.get('limit') is None else query_params.get('limit')[0]
+            limit = 10 if query_params.get(
+                'limit') is None else query_params.get('limit')[0]
             x1, y1, x2, y2 = query_params.get('x1', [None])[0], query_params.get('y1', [None])[0], \
-                query_params.get('x2', [None])[0], query_params.get('y2', [None])[0]
+                query_params.get('x2', [None])[
+                0], query_params.get('y2', [None])[0]
             if x1 or y1 or x2 or y2 is None:
                 sqlString = f"SELECT {id}, {trip} FROM public.{collectionId} WHERE  {id}={featureId} LIMIT {limit};"
             else:
@@ -314,7 +328,8 @@ class MyServer(BaseHTTPRequestHandler):
             rs = cursor.fetchall()
             movements = []
             for row in rs:
-                json_data = row[1].as_mfjson()  # Assuming the JSON data is in the second column of each row
+                # Assuming the JSON data is in the second column of each row
+                json_data = row[1].as_mfjson()
                 json_data = json.loads(json_data)
                 movements.append(json_data)
 
@@ -336,16 +351,18 @@ class MyServer(BaseHTTPRequestHandler):
     def do_post_collection_items(self, collectionId, connection, cursor):
 
         try:
-            content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
+            # <--- Gets the size of data
+            content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-            print("POST request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
+            print("POST request,\nPath: %s\nHeaders: %s\n" %
+                  (self.path, self.headers))
 
             data_dict = json.loads(post_data.decode('utf-8'))
             feat_id = data_dict.get("id")
             tempGeo = data_dict.get("temporalGeometry")
 
             if tempGeo is None:
-               raise Exception("DataError")
+                raise Exception("DataError")
 
             tGeomPoint = TGeomPoint.from_mfjson(json.dumps(tempGeo))
 
@@ -359,7 +376,8 @@ class MyServer(BaseHTTPRequestHandler):
             self.end_headers()
 
         except Exception as e:
-            self.handle_error(400 if "DataError" in str(e) else 404 if "does not exist" in str(e) else 500, str(e))
+            self.handle_error(400 if "DataError" in str(
+                e) else 404 if "does not exist" in str(e) else 500, str(e))
 
     def do_add_movement_data_in_mf(self, collectionId, featureId):
         columns = column_discovery(collectionId, cursor)
@@ -367,15 +385,15 @@ class MyServer(BaseHTTPRequestHandler):
         trip = columns[1][0]
 
         try:
-            print("POST request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
-            content_length = int(self.headers['Content-Length'])  # <--- Gets the size of data
+            print("POST request,\nPath: %s\nHeaders: %s\n" %
+                  (self.path, self.headers))
+            # <--- Gets the size of data
+            content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             data_dict = json.loads(post_data.decode('utf-8'))
 
             print(data_dict)
             tgeompoint = TGeomPoint.from_mfjson(json.dumps(data_dict))
-
-
 
             sqlString = f"UPDATE public.{collectionId} SET {trip}= merge({trip}, '{tgeompoint}') where {id} = {featureId}"
             cursor.execute(sqlString)
@@ -391,7 +409,8 @@ class MyServer(BaseHTTPRequestHandler):
         columns = column_discovery(collectionId, cursor)
         id = columns[0][0]
         try:
-            print("GET request,\nPath: %s\nHeaders: %s\n" % (self.path, self.headers))
+            print("GET request,\nPath: %s\nHeaders: %s\n" %
+                  (self.path, self.headers))
             sqlString = f"DELETE FROM public.{collectionId} WHERE {id}={mfeature_id}"
             cursor.execute(sqlString)
             connection.commit()
@@ -425,7 +444,7 @@ class MyServer(BaseHTTPRequestHandler):
 
         print(to_change)
 
-        if(len(to_change) == 1):
+        if (len(to_change) == 1):
             data_dict["coordinates"] = to_change[0]
         else:
             data_dict["sequences"] = to_change
@@ -446,8 +465,8 @@ class MyServer(BaseHTTPRequestHandler):
 
         string = f"SELECT "
 
-        for i in range(2,len(columns)):
-            string+= columns[i][0] + ","
+        for i in range(2, len(columns)):
+            string += columns[i][0] + ","
 
         string = string.rstrip(",")
         string += f" FROM public.{collectionId} WHERE {id} = {featureId}"
@@ -467,11 +486,11 @@ class MyServer(BaseHTTPRequestHandler):
             "numberReturned": 2
         }
 
-        send_json_response(self,200,json.dumps(json_data))
+        send_json_response(self, 200, json.dumps(json_data))
 
         return
 
-    def do_get_temporal_property(self,collectionId, featureId, propertyName):
+    def do_get_temporal_property(self, collectionId, featureId, propertyName):
         columns = column_discovery2(collectionId, cursor)
         id = columns[0][0]
         trip = columns[1][0]
@@ -481,6 +500,7 @@ class MyServer(BaseHTTPRequestHandler):
         print(rs[0][0])
         data = json.loads(rs[0][0])
         temporal_property = data.get(f"{propertyName}")
+
 
 if __name__ == "__main__":
     webServer = HTTPServer((hostName, serverPort), MyServer)
