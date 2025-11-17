@@ -13,6 +13,8 @@ from resource.collection.Delete import delete_collection
 from resource.collection.Replace import put_collection
 from resource.moving_features.Create import post_collection_items, insert_feature
 from resource.moving_features.Retrieve import get_collection_items
+
+
 pymeos_initialize()
 
 hostName = "localhost"
@@ -123,6 +125,7 @@ class MyServer(BaseHTTPRequestHandler):
     # # Get all collections
     def get_collections(self, connection, cursor):
         get_collections(self, connection, cursor)
+
     # cleanup later
 
     def handle_error(self, code, message):

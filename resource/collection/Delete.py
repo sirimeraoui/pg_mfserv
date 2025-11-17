@@ -22,7 +22,9 @@ port = 25431
 db = 'postgres'
 user = 'postgres'
 password = 'mysecretpassword'
-def delete_collection(self, collectionId,connection, cursor):
+
+
+def delete_collection(self, collectionId, connection, cursor):
     try:
         cursor.execute(
             "SELECT 1 FROM collections_metadata WHERE id = %s",
@@ -43,8 +45,9 @@ def delete_collection(self, collectionId,connection, cursor):
         )
         table_exists = cursor.fetchone()[0]
         exists = metadata_exists and table_exists
-        if(not exists):
-            self.handle_error(404, f"No collection found with id {collectionId}")
+        if (not exists):
+            self.handle_error(
+                404, f"No collection found with id {collectionId}")
             return
 
 # % removed: cursor.execute("DROP TABLE IF EXISTS public.%s" % collectionId) avoid sql injection
@@ -53,24 +56,24 @@ def delete_collection(self, collectionId,connection, cursor):
             [collectionId]
         )
         cursor.execute(
-            sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier(collectionId))
+            sql.SQL("DROP TABLE IF EXISTS {}").format(
+                sql.Identifier(collectionId))
         )
 
         connection.commit()
         self.send_response_only(204, "OK")
         self.end_headers()
     except Exception as e:
-        # print("eee",e)
+        print("error", e)
         self.handle_error(500, str(e))
 
 
-# Client Server | | | DELETE /collections/mfc_1 HTTP/1.1 | 
-# |------------------------------------------------------------------>| 
+# Client Server | | | DELETE /collections/mfc_1 HTTP/1.1 |
+# |------------------------------------------------------------------>|
 # |                                                                   |
 # | HTTP/1.1 204 OK                                                   |
 # |<------------------------------------------------------------------|
 # Listing 6 — An Example of Deleting an Existing Collection:
-
 
 
 # REQUIREMENT 11

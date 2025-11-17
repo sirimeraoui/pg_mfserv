@@ -13,7 +13,13 @@ This Python API server provides endpoints for interacting with MobilityDB, a tem
 - Supports GET, POST, PUT, and DELETE operations.
 - Integrates the PyMEOS library for seamless interaction with MobilityDB.
 - Provides endpoints for managing data stored in MobilityDB.
-
+## To test
+- create env from requirements.txt
+- docker pull —-platform=linux/amd64 mobilitydb/mobilitydb
+- docker volume create mobilitydb_data
+- docker run --name mobilitydb -e POSTGRES_PASSWORD=mysecretpassword -p 25431:5432 -v mobilitydb_data:/var/lib/postgresql -d mobilitydb/mobilitydb
+- python server.py
+- pytest -v -s
 ## Prerequisites
 - Linux (ubuntu)
 - A recent version of Pyhton
