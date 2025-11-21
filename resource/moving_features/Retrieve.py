@@ -23,202 +23,145 @@ user = 'postgres'
 password = 'mysecretpassword'
 
 
-def get_collection_items(self, collectionId,connection, cursor):
+def get_collection_items(self, collectionId, connection, cursor):
     try:
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
-        
-        # Parse query parameters with validation
+
+        # limit
         try:
-            limit = min(int(query_params.get('limit', [10])[0]), 1000)  # Add maximum limit
+            limit = min(int(query_params.get('limit', [10])[0]), 1000)
         except ValueError:
             self.handle_error(400, "Invalid limit parameter")
             return
-            
+
+        # BBOX
         bbox = query_params.get('bbox', [None])[0]
+        x1 = y1 = x2 = y2 = None
+        if bbox:
+            try:
+                coords = [float(c) for c in bbox.split(',')]
+                if len(coords) != 4:
+                    self.handle_error(400, "Invalid bbox format")
+                    return
+                x1, y1, x2, y2 = coords
+            except ValueError:
+                self.handle_error(400, "Invalid bbox coordinates")
+                return
+
+        #  datetime
         datetime_param = query_params.get('datetime', [None])[0]
-        sub_trajectory = query_params.get('subTrajectory', ['false'])[0].lower() == 'true'
-        leaf = query_params.get('leaf', [None])[0]
-        
-        # Validate parameter conflicts (REQUIREMENT 13E)
-        if sub_trajectory and leaf:
-            self.handle_error(400, "subTrajectory parameter cannot be used with leaf parameter")
-            return
-        
-        # Validate subTrajectory requirements (REQUIREMENT 12B, 12C)
-        if sub_trajectory:
-            if not datetime_param:
-                self.handle_error(400, "subTrajectory parameter requires datetime parameter")
-                return
-            if '/' not in datetime_param:
-                self.handle_error(400, "subTrajectory parameter requires bounded interval datetime")
-                return
-        
-        # Parse datetime
-        dateTime1 = None
-        dateTime2 = None
+        dateTime1 = dateTime2 = None
         if datetime_param:
             if '/' in datetime_param:
                 dateTime1, dateTime2 = datetime_param.split('/')
-                # Validate datetime format
-                try:
-                    if dateTime1: datetime.fromisoformat(dateTime1.replace('Z', '+00:00'))
-                    if dateTime2: datetime.fromisoformat(dateTime2.replace('Z', '+00:00'))
-                except ValueError:
-                    self.handle_error(400, "Invalid datetime format")
-                    return
             else:
                 dateTime1 = datetime_param
-        
-        # Get column names safely
+
+        #  subTrajectory
+        subTrajectory = query_params.get('subTrajectory', ['false'])[
+            0].lower() == 'true'
+
+        # leaf
+        leaf = query_params.get('leaf', ['false'])[0].lower() == 'true'
+
+        # Validate parameter conflicts
+        if subTrajectory and leaf:
+            self.handle_error(
+                400, "subTrajectory parameter cannot be used with leaf parameter")
+            return
+        if subTrajectory and not datetime_param:
+            self.handle_error(
+                400, "subTrajectory parameter requires datetime parameter")
+            return
+# get cols
         columns = column_discovery(collectionId, cursor)
         if not columns or len(columns) < 2:
             self.handle_error(404, f"Collection {collectionId} not found")
             return
-            
+
         id_col = columns[0][0]
         trip_col = columns[1][0]
-        
-        # Build base query safely using parameterized SQL
-        base_query = sql.SQL("""
-            SELECT {id_col}, asMFJSON({trip_col}), count({trip_col}) OVER() as total_count 
-            FROM public.{table}
-        """).format(
-            id_col=sql.Identifier(id_col),
-            trip_col=sql.Identifier(trip_col),
-            table=sql.Identifier(collectionId)
-        )
-        
-        # Add WHERE clauses safely
-        where_conditions = []
+
+        # Build query using atstbox if bbox or datetime
+        query_parts = []
         params = []
-        
-        if bbox:
-            try:
-                bbox_coords = [float(coord) for coord in bbox.split(',')]
-                if len(bbox_coords) == 4:  # 2D bbox [minx, miny, maxx, maxy]
-                    x1, y1, x2, y2 = bbox_coords
-                    # Use detected CRS instead of hardcoded 4326
-                    where_conditions.append(sql.SQL("ST_Intersects(trajectory({trip_col})::geometry, ST_MakeEnvelope(%s, %s, %s, %s, 4326))").format(
-                        trip_col=sql.Identifier(trip_col)
-                    ))
-                    params.extend([x1, y1, x2, y2])
-                else:
-                    self.handle_error(400, "Invalid bbox format: expected 4 coordinates")
-                    return
-            except ValueError:
-                self.handle_error(400, "Invalid bbox coordinates")
-                return
-        
-        if dateTime1 and dateTime2:
-            where_conditions.append(sql.SQL("period({trip_col}) && period('[%s, %s]')").format(
-                trip_col=sql.Identifier(trip_col)
-            ))
-            params.extend([dateTime1, dateTime2])
-        elif dateTime1:
-            where_conditions.append(sql.SQL("period({trip_col}) && period('[%s,]')").format(
-                trip_col=sql.Identifier(trip_col)
-            ))
-            params.append(dateTime1)
-        
-        if where_conditions:
-            base_query += sql.SQL(" WHERE ") + sql.SQL(" AND ").join(where_conditions)
-        
-        base_query += sql.SQL(" LIMIT %s;")
-        params.append(limit)
-        
-        # Execute query safely
-        cursor.execute(base_query, params)
+
+        if x1 is not None and y1 is not None and dateTime1 and dateTime2:
+            query_parts.append(
+                f"atstbox({trip_col}, STBOX 'SRID=4326;STBOX XT(({x1},{y1}),({x2},{y2})),[{dateTime1},{dateTime2}])') IS NOT NULL"
+            )
+        elif x1 is not None and y1 is not None:
+            query_parts.append(
+                f"atstbox({trip_col}, STBOX 'SRID=4326;STBOX XY(({x1},{y1}),({x2},{y2}))') IS NOT NULL"
+            )
+        elif dateTime1 and dateTime2:
+            query_parts.append(
+                f"atstbox({trip_col}, STBOX 'SRID=4326;STBOX T([{dateTime1},{dateTime2}])') IS NOT NULL"
+            )
+
+        where_clause = " AND ".join(query_parts)
+        if where_clause:
+            where_clause = "WHERE " + where_clause
+
+        query = f"""
+            SELECT {id_col}, asMFJSON({trip_col}), count({trip_col}) OVER() as total_count
+            FROM public.{collectionId}
+            {where_clause}
+            LIMIT {limit};
+        """
+
+        cursor.execute(query)
         data = cursor.fetchall()
-        
         if not data:
-            # Return proper empty FeatureCollection
-            empty_response = {
+            send_json_response(self, 200, json.dumps({
                 "type": "FeatureCollection",
                 "features": [],
                 "timeStamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "numberMatched": 0,
                 "numberReturned": 0,
                 "links": [{"href": self.path, "rel": "self", "type": "application/geo+json"}]
-            }
-            send_json_response(self, 200, json.dumps(empty_response))
+            }))
             return
-        
-        total_row_count = data[0][2] if data else 0
+
+        total_row_count = data[0][2]
         features = []
-        
+
         for row in data:
             feature_id = row[0]
             mf_json_str = row[1]
-            
-            if sub_trajectory and dateTime1 and dateTime2:
-                # Apply subTrajectory operation safely
-                sub_traj_query = sql.SQL("""
-                    SELECT asMFJSON(atPeriod({trip_col}, '[%s, %s]'))
-                    FROM public.{table} 
-                    WHERE {id_col} = %s
-                """).format(
-                    trip_col=sql.Identifier(trip_col),
-                    table=sql.Identifier(collectionId),
-                    id_col=sql.Identifier(id_col)
+
+            if subTrajectory and dateTime1 and dateTime2:
+                cursor.execute(
+                    f"SELECT asMFJSON(atPeriod({trip_col}, '[{dateTime1},{dateTime2}]')) "
+                    f"FROM public.{collectionId} WHERE {id_col} = %s", [
+                        feature_id]
                 )
-                cursor.execute(sub_traj_query, [dateTime1, dateTime2, feature_id])
-                sub_traj_result = cursor.fetchone()
-                if sub_traj_result and sub_traj_result[0]:
-                    mf_json_str = sub_traj_result[0]
-            
+                sub_res = cursor.fetchone()
+                if sub_res and sub_res[0]:
+                    mf_json_str = sub_res[0]
+
             if mf_json_str:
-                try:
-                    feature_data = json.loads(mf_json_str)
-                    
-                    # Ensure proper MF-JSON structure
-                    if 'type' not in feature_data:
-                        feature_data['type'] = 'Feature'
-                    
-                    # Add required properties
-                    feature_data['id'] = feature_id
-                    
-                    # Preserve interpolation property (REQUIREMENT 13C)
-                    if sub_trajectory and 'temporalGeometry' in feature_data:
-                        # Ensure interpolation is preserved from original
-                        original_interpolation = feature_data['temporalGeometry'].get('interpolation')
-                        if original_interpolation:
-                            feature_data['temporalGeometry']['interpolation'] = original_interpolation
-                    
-                    features.append(feature_data)
-                except json.JSONDecodeError:
-                    # Skip invalid JSON features
-                    continue
-        
-        # Build fully compliant response
+                feature = json.loads(mf_json_str)
+                feature["id"] = feature_id
+
+                # Leaf: only return last instant of trajectory
+                if leaf and "datetimes" in feature:
+                    feature["coordinates"] = [feature["coordinates"][-1]]
+                    feature["datetimes"] = [feature["datetimes"][-1]]
+
+                features.append(feature)
+
         response_data = {
             "type": "FeatureCollection",
             "features": features,
             "timeStamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "numberMatched": total_row_count,
             "numberReturned": len(features),
-            "links": [
-                {
-                    "href": self.path,
-                    "rel": "self", 
-                    "type": "application/geo+json"
-                }
-            ],
-            # Always include default CRS/TRS
-            "crs": {
-                "type": "Name",
-                "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}
-            },
-            "trs": {
-                "type": "Link",
-                "properties": {
-                    "type": "ogcdef",
-                    "href": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
-                }
-            }
+            "links": [{"href": self.path, "rel": "self", "type": "application/geo+json"}],
         }
-        
+
         send_json_response(self, 200, json.dumps(response_data))
-        
+
     except Exception as e:
-        self.handle_error(500, f'Internal server error: {str(e)}')
+        self.handle_error(500, f"Internal server error: {str(e)}")

@@ -126,18 +126,17 @@ def insert_feature(self, feature, collectionId, connection, cursor):
         connection.commit()
 
     # --------- Insert the feature with conflict check ---------
-    try:
-        cursor.execute(
-            sql.SQL(
-                "INSERT INTO {} (id, temporalgeometry) VALUES (%s, %s::tgeompoint);"
-            ).format(sql.Identifier(collectionId)),
-            (feat_id, str(tGeomPoint))
-        )
-    except Exception as e:
-        if "duplicate key value violates unique constraint" in str(e):
-            raise Exception(
-                f"ConflictError: Feature with id '{feat_id}' already exists")
-        else:
-            raise
+    cursor.execute(
+        sql.SQL(
+            "INSERT INTO {} (id, temporalgeometry) VALUES (%s, %s::tgeompoint) "
+            "ON CONFLICT (id) DO NOTHING RETURNING id;"
+        ).format(sql.Identifier(collectionId)),
+        (feat_id, str(tGeomPoint))
+    )
+    inserted = cursor.fetchone()
+    if inserted:
+        print(f"Inserted feature {feat_id}")
+    else:
+        print(f"Feature {feat_id} already exists, skipped")
 
     return feat_id

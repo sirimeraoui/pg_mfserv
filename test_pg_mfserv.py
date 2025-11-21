@@ -32,7 +32,7 @@ def log_request_response(action: str, response: requests.Response):
     print("=" * 60 + "\n")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def create_collections():
     # Create initial test collections (ships, boats)
     collections = [
@@ -70,7 +70,7 @@ def create_collections():
 
 
 # def test_get_all_collections(create_collections):
-#     """GET /collections"""
+#     #gET /collections
 #     resp = requests.get(f"{HOST}/collections")
 #     log_request_response("Get all collections", resp)
 #     assert resp.status_code == 200
@@ -141,7 +141,7 @@ def create_collections():
 
 # ____________________________________MOVING FEATURES CREATE_____________________________________________
 def test_create_single_feature(create_collections):
-    """Send first JSON object as a single Feature exactly as-is"""
+    # Send first JSON object as a single Feature exactly as-is
     collection_id = "ships"
     feature_data = data[0]
 
@@ -192,6 +192,130 @@ def test_create_feature_collection():
         headers={"Content-Type": "application/geo+json"}
     )
     assert resp.status_code in (201, 409)
+
+# ____________________________________MOVING FEATURES GET_____________________________________________
+
+
+def test_get_all_items(create_collections):
+    # GET /collections/{id}/items returns all items
+    collection_id = "ships"
+    resp = requests.get(f"{HOST}/collections/{collection_id}/items")
+    log_request_response(f"GET all items from {collection_id}", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    assert data_resp["type"] == "FeatureCollection"
+    assert len(data_resp["features"]) > 0
+    assert data_resp["numberReturned"] == len(data_resp["features"])
+
+
+def test_get_items_with_limit(create_collections):
+    # GET with limit parameter
+    collection_id = "ships"
+    limit = 1
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?limit={limit}")
+    log_request_response(f"GET items with limit={limit}", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    assert len(data_resp["features"]) <= limit
+    assert data_resp["numberReturned"] == len(data_resp["features"])
+
+
+def test_get_items_with_bbox(create_collections):
+    # GET with bbox filter
+    collection_id = "ships"
+    # using coordinates of the first feature
+    bbox = "12.675237,54.524345,12.675237,54.524345"
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?bbox={bbox}")
+    log_request_response(f"GET items with bbox={bbox}", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    # All features should intersect the bbox
+    for f in data_resp["features"]:
+        coords = f["temporalGeometry"]["coordinates"][0]
+        x, y = coords
+        x1, y1, x2, y2 = map(float, bbox.split(','))
+        assert x1 <= x <= x2
+        assert y1 <= y <= y2
+
+
+def test_get_items_with_datetime(create_collections):
+    # GET with datetime filte
+    collection_id = "ships"
+    # Using datetime of first feature
+    dt = urllib.parse.quote("2024-03-01T00:00:00+01")
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?datetime={dt}")
+    log_request_response(f"GET items with datetime={dt}", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    for f in data_resp["features"]:
+        times = f["temporalGeometry"]["datetimes"]
+        assert "2024-03-01T00:00:00+01" in times
+
+
+def test_get_items_invalid_limit(create_collections):
+   # GET with invalid limit should return 400
+    collection_id = "ships"
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?limit=invalid")
+    log_request_response(f"GET items with invalid limit", resp)
+    assert resp.status_code == 400
+
+
+def test_get_items_subtrajectory_without_datetime(create_collections):
+    # subTrajectory=true without datetime should return 400
+    collection_id = "ships"
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?subTrajectory=true")
+    log_request_response(
+        f"GET items with subTrajectory=true without datetime", resp)
+    assert resp.status_code == 400
+
+
+def test_get_items_subtrajectory_with_interval(create_collections):
+    # subTrajectory=true with a valid datetime interval
+    collection_id = "ships"
+    interval = urllib.parse.quote(
+        "2024-03-01T00:00:00+01/2024-03-01T01:00:00+01")
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?subTrajectory=true&datetime={interval}")
+    log_request_response(
+        f"GET items with subTrajectory interval={interval}", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    for f in data_resp["features"]:
+        # All datetimes should be within the interval
+        for dt in f["temporalGeometry"]["datetimes"]:
+            assert "2024-03-01T00:00:00+01" <= dt <= "2024-03-01T01:00:00+01"
+
+
+def test_get_items_leaf(create_collections):
+    # GET with leaf=true should return only the last instant of each trajectory
+    collection_id = "ships"
+    resp = requests.get(f"{HOST}/collections/{collection_id}/items?leaf=true")
+    log_request_response(f"GET items with leaf=true", resp)
+    assert resp.status_code == 200
+    data_resp = resp.json()
+    for f in data_resp["features"]:
+        coords = f["temporalGeometry"]["coordinates"]
+        datetimes = f["temporalGeometry"]["datetimes"]
+        # Leaf should have only one coordinate & datetime
+        assert len(coords) == 1
+        assert len(datetimes) == 1
+
+
+def test_get_items_leaf_with_subtrajectory(create_collections):
+    # GET with leaf=true and subTrajectory=true should return 400
+    collection_id = "ships"
+    interval = urllib.parse.quote(
+        "2024-03-01T00:00:00+01/2024-03-01T01:00:00+01")
+    resp = requests.get(
+        f"{HOST}/collections/{collection_id}/items?leaf=true&subTrajectory=true&datetime={interval}")
+    log_request_response(
+        f"GET items with leaf=true & subTrajectory=true", resp)
+    assert resp.status_code == 400
 
 
 pymeos_finalize()
