@@ -207,9 +207,11 @@ def test_get_all_items(create_collections):
     assert len(data_resp["features"]) > 0
     assert data_resp["numberReturned"] == len(data_resp["features"])
 
+    # GET with limit parameter
+
 
 def test_get_items_with_limit(create_collections):
-    # GET with limit parameter
+
     collection_id = "ships"
     limit = 1
     resp = requests.get(
@@ -220,9 +222,11 @@ def test_get_items_with_limit(create_collections):
     assert len(data_resp["features"]) <= limit
     assert data_resp["numberReturned"] == len(data_resp["features"])
 
+    # GET with bbox filter
+
 
 def test_get_items_with_bbox(create_collections):
-    # GET with bbox filter
+
     collection_id = "ships"
     # using coordinates of the first feature
     bbox = "12.675237,54.524345,12.675237,54.524345"
@@ -231,7 +235,7 @@ def test_get_items_with_bbox(create_collections):
     log_request_response(f"GET items with bbox={bbox}", resp)
     assert resp.status_code == 200
     data_resp = resp.json()
-    # All features should intersect the bbox
+    # features intersecting the bbox
     for f in data_resp["features"]:
         coords = f["temporalGeometry"]["coordinates"][0]
         x, y = coords
@@ -239,9 +243,11 @@ def test_get_items_with_bbox(create_collections):
         assert x1 <= x <= x2
         assert y1 <= y <= y2
 
+    # GET with datetime
+
 
 def test_get_items_with_datetime(create_collections):
-    # GET with datetime filte
+
     collection_id = "ships"
     # Using datetime of first feature
     dt = urllib.parse.quote("2024-03-01T00:00:00+01")
@@ -252,20 +258,24 @@ def test_get_items_with_datetime(create_collections):
     data_resp = resp.json()
     for f in data_resp["features"]:
         times = f["temporalGeometry"]["datetimes"]
-        assert "2024-03-01T00:00:00+01" in times
+        assert "2024-03-01T00:00:00+01:00" in times
+
+   # GET with invalid limit should return 400
 
 
 def test_get_items_invalid_limit(create_collections):
-   # GET with invalid limit should return 400
+
     collection_id = "ships"
     resp = requests.get(
         f"{HOST}/collections/{collection_id}/items?limit=invalid")
     log_request_response(f"GET items with invalid limit", resp)
     assert resp.status_code == 400
 
+    # subTrajectory=true without datetime should return 400
+
 
 def test_get_items_subtrajectory_without_datetime(create_collections):
-    # subTrajectory=true without datetime should return 400
+
     collection_id = "ships"
     resp = requests.get(
         f"{HOST}/collections/{collection_id}/items?subTrajectory=true")
@@ -273,9 +283,11 @@ def test_get_items_subtrajectory_without_datetime(create_collections):
         f"GET items with subTrajectory=true without datetime", resp)
     assert resp.status_code == 400
 
+    # subTrajectory=true with a valid datetime interval
+
 
 def test_get_items_subtrajectory_with_interval(create_collections):
-    # subTrajectory=true with a valid datetime interval
+
     collection_id = "ships"
     interval = urllib.parse.quote(
         "2024-03-01T00:00:00+01/2024-03-01T01:00:00+01")
@@ -286,13 +298,15 @@ def test_get_items_subtrajectory_with_interval(create_collections):
     assert resp.status_code == 200
     data_resp = resp.json()
     for f in data_resp["features"]:
-        # All datetimes should be within the interval
+        # datetimes should be within iterval period
         for dt in f["temporalGeometry"]["datetimes"]:
             assert "2024-03-01T00:00:00+01" <= dt <= "2024-03-01T01:00:00+01"
 
+    # GET with leaf=true should return only the last instant of each trajectory
+
 
 def test_get_items_leaf(create_collections):
-    # GET with leaf=true should return only the last instant of each trajectory
+
     collection_id = "ships"
     resp = requests.get(f"{HOST}/collections/{collection_id}/items?leaf=true")
     log_request_response(f"GET items with leaf=true", resp)
@@ -305,9 +319,10 @@ def test_get_items_leaf(create_collections):
         assert len(coords) == 1
         assert len(datetimes) == 1
 
+    # GET with leaf=true and subTrajectory=true should return 400
+
 
 def test_get_items_leaf_with_subtrajectory(create_collections):
-    # GET with leaf=true and subTrajectory=true should return 400
     collection_id = "ships"
     interval = urllib.parse.quote(
         "2024-03-01T00:00:00+01/2024-03-01T01:00:00+01")

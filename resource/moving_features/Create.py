@@ -86,8 +86,8 @@ def post_collection_items(self, collectionId, connection, cursor):
             code = 409
         else:
             code = 500
-        print(msg)
-        self.handle_error(code, msg)
+        print("error", msg)
+        # self.handle_error(code, msg)
 
 
 def insert_feature(self, feature, collectionId, connection, cursor):
