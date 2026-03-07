@@ -15,6 +15,8 @@ from resource.moving_features.Create import post_collection_items, insert_featur
 from resource.moving_features.Retrieve import get_collection_items
 from resource.moving_feature.Retrieve import get_movement_single_moving_feature
 from resource.moving_feature.Delete import delete_single_moving_feature
+from resource.temporal_geom_seq.Retrieve import get_tgsequence
+from resource.temporal_geom_seq.Create import post_tgsequence, add_movement_data_in_mf
 pymeos_initialize()
 
 hostName = "localhost"
@@ -35,7 +37,7 @@ class MyServer(BaseHTTPRequestHandler):
     # protocol_version = "HTTP/1.1"
     def do_GET(self):
         if 'tgsequence' in self.path:
-            self.do_get_squence()
+            self.get_tgsequence()
         elif 'tproperties' in self.path:
             self.do_get_tproperties()
         elif self.path == '/':
@@ -56,10 +58,9 @@ class MyServer(BaseHTTPRequestHandler):
             collection_id = path_only.split('/')[-1]  # e.g., 'ships'
             self.get_collection_id(collection_id, connection, cursor)
 
-    def do_get_squence(self):
-        collection_id = self.path.split('/')[2]
-        feature_id = self.path.split('/')[4]
-        self.do_get_movement_single_moving_feature(collection_id, feature_id)
+    def get_tgsequence(self, connection, cursor):
+        get_tgsequence(self, connection, cursor)
+
 
     def do_get_tproperties(self):
         collection_id = self.path.split('/')[2]
@@ -75,18 +76,20 @@ class MyServer(BaseHTTPRequestHandler):
     # POST requests router
     def do_POST(self):
         if 'tgsequence' in self.path:
-            self.do_post_sequence()
+            self.post_tgsequence()
         elif self.path == '/collections':
             self.post_collections(connection, cursor)
         elif '/items' in self.path and self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[2]
             self.post_collection_items(collection_id, connection, cursor)
 
-    def do_post_sequence(self):
-        collection_id = self.path.split('/')[2]
-        feature_id = self.path.split('/')[4]
+#______________
+    def add_movement_data_in_mf(self, collectionId, featureId, connection, cursor):
+        add_movement_data_in_mf(self, collectionId, featureId, connection, cursor)
 
-        self.do_add_movement_data_in_mf(collection_id, feature_id)
+    def post_tgsequence(self,connection, cursor):
+        post_tgsequence(self, connection, cursor)
+#______________
 
     def do_DELETE(self):
         if 'tgsequence' in self.path:
@@ -99,7 +102,7 @@ class MyServer(BaseHTTPRequestHandler):
             components = self.path.split('/')
             collection_id = components[2]
             mfeature_id = components[4]
-            self.do_delete_feature(collection_id, mfeature_id)
+            self.delete_single_moving_feature(collection_id, mfeature_id)
 
     def do_delete_sequence(self):
         components = self.path.split('/')
@@ -283,31 +286,6 @@ class MyServer(BaseHTTPRequestHandler):
     #     except Exception as e:
     #         self.handle_error(400 if "DataError" in str(e) else 500, str(e))
 
-    def do_add_movement_data_in_mf(self, collectionId, featureId):
-        columns = column_discovery(collectionId, cursor)
-        id = columns[0][0]
-        trip = columns[1][0]
-
-        try:
-            print("POST request,\nPath: %s\nHeaders: %s\n" %
-                  (self.path, self.headers))
-            # <--- Gets the size of data
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data_dict = json.loads(post_data.decode('utf-8'))
-
-            print(data_dict)
-            tgeompoint = TGeomPoint.from_mfjson(json.dumps(data_dict))
-
-            sqlString = f"UPDATE public.{collectionId} SET {trip}= merge({trip}, '{tgeompoint}') where {id} = {featureId}"
-            cursor.execute(sqlString)
-            connection.commit()
-
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-        except Exception as e:
-            self.handle_error(400, str(e))
 
 
 
