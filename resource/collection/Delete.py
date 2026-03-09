@@ -56,7 +56,7 @@ def delete_collection(self, collectionId, connection, cursor):
             [collectionId]
         )
         cursor.execute(
-            sql.SQL("DROP TABLE IF EXISTS {}").format(
+            sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(
                 sql.Identifier(collectionId))
         )
 

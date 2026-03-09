@@ -274,6 +274,7 @@ def test_get_items_invalid_limit(create_collections):
     # subTrajectory=true without datetime should return 400
 
 
+# IS THERE A SUBTRAJECTORY ON collectionId?____________________________________________________________pRAMS RECHECK????????
 def test_get_items_subtrajectory_without_datetime(create_collections):
 
     collection_id = "ships"
@@ -331,6 +332,91 @@ def test_get_items_leaf_with_subtrajectory(create_collections):
     log_request_response(
         f"GET items with leaf=true & subTrajectory=true", resp)
     assert resp.status_code == 400
+# IS THERE A SUBTRAJECTORY ON collectionId?____________________________________________________________pRAMS RECHECK????????ABOVE
+#______________________________________________________________________path.../.../../mFeatureId____________________________________________________________________________
+
+#Get Single Moving Feature paht .../.../../mFeatureId
+# def test_get_single_item():
+
+#     collection_id = "ships"
+#     feature_id = data[0]["mmsi"]
+
+#     resp = requests.get(f"{HOST}/collections/{collection_id}/items/{feature_id}")
+#     log_request_response("GET single feature", resp)
+
+#     assert resp.status_code == 200
+#     js = resp.json()
+#     assert js["type"] == "Feature"
+#     assert js["id"] == str(feature_id)
+
+
+
+
+
+#Delete Single Moving Feature paht .../.../../mFeatureId
+# def test_delete_item():
+
+#     collection_id = "ships"
+#     feature_id = data[0]["mmsi"]
+
+#     resp = requests.delete(
+#         f"{HOST}/collections/{collection_id}/items/{feature_id}"
+#     )
+
+#     log_request_response("DELETE feature", resp)
+
+#     assert resp.status_code in (200,204)
+
+#     resp = requests.get(
+#         f"{HOST}/collections/{collection_id}/items/{feature_id}"
+#     )
+
+#     assert resp.status_code == 404
+
+
+#______________________________________________________________________path.../.../../mFeatureId____________________________________________________________________________
+
+
+
+
+
+#Single Moving Feature Temporal Geom Sequence.../.../../mFeatureId/tgsequence (Temporal Geom Sequence)
+
+# def test_get_tgsequence():
+
+#     collection_id = "ships"
+#     feature_id = data[0]["mmsi"]
+
+#     resp = requests.get(
+#         f"{HOST}/collections/{collection_id}/items/{feature_id}/tgsequence"
+#     )
+
+#     log_request_response("GET tgsequence", resp)
+
+#     assert resp.status_code == 200
+#     js = resp.json()
+#     assert js["type"] == "TemporalGeometrySequence"
+
+
+
+
+
+
+
+def test_delete_all_created_collections(create_collections):
+
+    created_collections = ["ships","boats"]
+
+    for col_id in created_collections:
+        resp = requests.delete(f"{HOST}/collections/{col_id}")
+        print(f"Deleting collection {col_id} → status: {resp.status_code}")
+        # 204 OK or 404 if already deleted
+        assert resp.status_code in (200, 204, 404)
+
+        # verify deletion
+        resp_check = requests.get(f"{HOST}/collections/{col_id}")
+        assert resp_check.status_code == 404
+  
 
 
 pymeos_finalize()

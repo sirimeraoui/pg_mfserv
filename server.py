@@ -41,37 +41,40 @@ cursor = connection.cursor()
 class MyServer(BaseHTTPRequestHandler):
     # protocol_version = "HTTP/1.1"
     def do_GET(self):
+        # /collections/{collectionId}/items/{mFeatureId}/tgsequence
         if 'tgsequence' in self.path:
             self.get_tgsequence(connection, cursor)
+        # /collections/{collectionId}/items/{mFeatureId}/tproperties/{tPropertyName}
         elif "/tproperties/" in self.path:
             parts = self.path.split('/')
             collectionId = parts[2]
             featureId = parts[4]
             propertyName = parts[6]
             self.get_temporal_property(collectionId, featureId, propertyName, connection, cursor)
+        # /collections/{collectionId}/items/{mFeatureId}/tproperties
         elif self.path.endswith("/tproperties"):
             self.get_tproperties(connection, cursor)
-        # home route
-        elif self.path == '/':
-            self.do_home()
-        # collections
-        elif self.path == '/collections':
-            self.get_collections(connection, cursor)
-        # single feature metadata
-        elif self.path.startswith('/collections') and '/items/' in self.path:
-            collectionId = self.path.split('/')[2]
-            feature_id = self.path.split('/')[-1]
-            self.do_get_meta_data(collectionId, feature_id)
-
-        # all items in a collection
+        # /collections/{collectionId}/items/{mFeatureId}
+        elif self.path.startswith('/collections/') and '/items/' in self.path and len(self.path.split('/')) == 5:
+            parts = self.path.split('/')
+            collectionId = parts[2]
+            mFeature_id = parts[4]
+            self.get_movement_single_moving_feature(collectionId, mFeature_id, connection, cursor)
+        # /collections/{collectionId}/items
         elif '/items' in self.path and self.path.startswith('/collections/'):
             collection_id = self.path.split('/')[2]
             self.get_collection_items(collection_id, connection, cursor)
-        # single collection
+        # /collections
+        elif self.path == '/collections':
+            self.get_collections(connection, cursor)
+        # /collections/{collectionId}
         elif self.path.startswith('/collections/'):
             path_only = urlparse(self.path).path
             collection_id = path_only.split('/')[-1]
             self.get_collection_id(collection_id, connection, cursor)
+
+        elif self.path == '/':
+            self.do_home()
             # POST requests router
     def do_POST(self):
         if 'tgsequence' in self.path:
@@ -100,12 +103,12 @@ class MyServer(BaseHTTPRequestHandler):
         elif self.path.startswith('/collections/') and 'items' not in self.path:
             collection_id = self.path.split('/')[-1]
             self.delete_collection(collection_id, connection, cursor)
-        elif '/items' in self.path and self.path.startswith('/collections/'):
-            # Extract collection ID and mFeatureId from the path
+            #delete single moving feature: delete /collections/{collectionId}/items/{mFeatureId}
+        elif self.path.startswith('/collections/') and '/items/' in self.path and len(self.path.split('/')) == 5:
             components = self.path.split('/')
             collection_id = components[2]
-            mfeature_id = components[4]
-            self.delete_single_moving_feature(collection_id, mfeature_id)
+            mFeature_id = components[4]
+            self.delete_single_moving_feature(collection_id, mFeature_id, connection, cursor)
         elif "/tproperties/" in self.path and len(self.path.split('/')) == 8:
             #   delete /collections/{collectionId}/items/{mFeatureId}/tproperties/{tPropertyName}/{tValueId}
             parts = self.path.split('/')
@@ -201,12 +204,12 @@ class MyServer(BaseHTTPRequestHandler):
                                   e) else str(e))
 ## Resource Moving Feature (single)
     #Get
-    def get_movement_single_moving_feature(self, collectionId, featureId, connection, cursor):
-        get_movement_single_moving_feature(self, collectionId, featureId, connection, cursor)
+    def get_movement_single_moving_feature(self, collectionId, mFeatureId, connection, cursor):
+        get_movement_single_moving_feature(self, collectionId, mFeatureId, connection, cursor)
 
     #Delete
-    def delete_single_moving_feature(self, collectionId, mfeature_id, connection, cursor):
-        delete_single_moving_feature(self, collectionId, mfeature_id, connection, cursor)
+    def delete_single_moving_feature(self, collectionId, mFeature_id, connection, cursor):
+        delete_single_moving_feature(self, collectionId, mFeature_id, connection, cursor)
 
 
 ## Resource Temporal Geometry Sequence
