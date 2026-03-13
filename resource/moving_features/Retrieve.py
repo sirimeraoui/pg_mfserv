@@ -1,179 +1,237 @@
-
-# REQUIREMENT 14
-# IDENTIFIER
-# /req/movingfeatures/features-get
+# REQ 14: /req/movingfeatures/features-get
+# REQ16: /req/movingfeatures/features-get-success
+# REQ50-52: Common params (limit, bbox, datetime) 
+# REQ 12-13: subTrajectory param(ogc)
+# REQ23-24: leaf param
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from utils import column_discovery, send_json_response, column_discovery2
-from pymeos.db.psycopg2 import MobilityDB
-from psycopg2 import sql
-import json
-from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint
+from utils import send_json_response
+from pymeos import TGeomPoint
 from urllib.parse import urlparse, parse_qs
-import math
+import json
 from datetime import datetime
+from dateutil import parser, tz
+from resource.moving_feature.feature_helper import build_feature_from_row, build_feature_collection_response
+import traceback
 
-hostName = "localhost"
-serverPort = 8080
-
-host = 'localhost'
-port = 25431
-db = 'postgres'
-user = 'postgres'
-password = 'mysecretpassword'
-
-
-def get_collection_items(self, collectionId, connection, cursor):
-    from dateutil import parser, tz
+def get_collection_items(self, collection_id, connection, cursor):
     try:
         parsed_url = urlparse(self.path)
         query_params = parse_qs(parsed_url.query)
-        # get prams
+        
+        # Parse parameters
         try:
-            limit = min(int(query_params.get('limit', [10])[0]), 1000)
+            limit = min(int(query_params.get('limit', [10])[0]), 10000)  # Req 50: max 10000
         except ValueError:
             return self.handle_error(400, "Invalid limit parameter")
 
         bbox = query_params.get('bbox', [None])[0]
         datetime_param = query_params.get('datetime', [None])[0]
-        subTrajectory = query_params.get('subTrajectory', ['false'])[
-            0].lower() == "true"
+        subTrajectory = query_params.get('subTrajectory', ['false'])[0].lower() == "true" #only if true
         leaf = query_params.get('leaf', ['false'])[0].lower() == "true"
 
-        # parse bbox
+        #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_ query params combos validation(Reqs 13E and 24E)\\\\\\\\\\\\\\\\\\\\\\\
+        if subTrajectory and leaf:
+            return self.handle_error(400, "subTrajectory cannot be used with leaf")
+        
+        # Parse bbox (Req 51)
         x1 = y1 = x2 = y2 = None
         if bbox:
             try:
                 coords = [float(c) for c in bbox.split(',')]
                 if len(coords) != 4:
-                    return self.handle_error(400, "Invalid bbox format")
+                    return self.handle_error(400, "Invalid bbox format - must be 4 numbers")
                 x1, y1, x2, y2 = coords
             except Exception:
                 return self.handle_error(400, "Invalid bbox coordinates")
 
-        # parse datetime
+        # Parse datetime (Req52)
         dt1 = dt2 = None
         if datetime_param:
             if "/" in datetime_param:
                 dt1, dt2 = datetime_param.split("/")
+                # subTrajectory== true==> bounder interval (Req 12C)
+                if subTrajectory and (not dt1 or not dt2):
+                    return self.handle_error(400, "subTrajectory requires a bounded datetime interval")
             else:
                 dt1 = datetime_param  # instant
-
-        if subTrajectory and leaf:
-            return self.handle_error(400, "subTrajectory cannot be used with leaf")
+                if subTrajectory:
+                    return self.handle_error(400, "subTrajectory requires a bounded interval, not a single instant")
+        
+        # subTrajectory without datetime interval code 400
         if subTrajectory and not (dt1 and dt2):
             return self.handle_error(400, "subTrajectory requires a datetime interval")
+        #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_
+        #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_check collection by path param exists\\\\\\\\\\\\\\\\\__\\\\\\\\\\\\
+        cursor.execute(
+            "SELECT id FROM collections WHERE id = %s",
+            (collection_id,)
+        )
+        if cursor.fetchone() is None:
+            return self.handle_error(404, f"Collection '{collection_id}' not found")
+        #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\__\\\\\\\\\\\\\\\\\\\__
 
-        columns = column_discovery(collectionId, cursor)
-        if not columns or len(columns) < 2:
-            return self.handle_error(404, f"Collection {collectionId} not found")
-
-        trip_col = columns[0][0]   # trajectory column
-        id_col = columns[1][0]     # id column
-
-    # where
-        filters = []
-
-        if x1 is not None and dt1 and dt2:
-            filters.append(
-                f"atstbox({trip_col}, stbox 'STBOX XT((({x1},{y1}),({x2},{y2})),[{dt1},{dt2}])', false) IS NOT NULL"
-            )
-        elif x1 is not None:
-            filters.append(
-                f"atstbox({trip_col}, stbox 'STBOX X(({x1},{y1}),({x2},{y2}))', false) IS NOT NULL"
-            )
-        elif dt1 and dt2:
-            filters.append(
-                f"atstbox({trip_col}, stbox 'STBOX T([{dt1},{dt2}])', false) IS NOT NULL"
-            )
-
-        where_clause = ("WHERE " + " AND ".join(filters)) if filters else ""
-
-    #    main
-        query = f"""
-            SELECT {id_col}, asMFJSON({trip_col}), 
-                   COUNT(*) OVER() AS total_count
-            FROM public.{collectionId}
-            {where_clause}
-            LIMIT {limit};
+        # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\Build query
+        #check left join on mf fetures , is it possible that a mffeature exists without a single tempgeo , same for post f  clean
+        query = """
+            SELECT 
+                mf.id,
+                mf.type,
+                mf.geometry,
+                mf.properties,
+                mf.bbox,
+                mf.time_range,
+                mf.crs,
+                mf.trs,
+                tg.id as geom_id,
+                tg.geometry_type,
+                tg.trajectory,
+                tg.interpolation,
+                tg.base,
+                COUNT(*) OVER() AS total_count
+            FROM moving_features mf
+            LEFT JOIN temporal_geometries tg ON mf.id = tg.feature_id
+            WHERE mf.collection_id = %s
         """
+        params = [collection_id]
 
-        cursor.execute(query)
+        # + spatial filter using MobilityDB if bbox param
+        if x1 is not None:
+            query += f" AND tg.trajectory && stbox 'STBOX X(({x1},{y1}),({x2},{y2}))'"
+        
+        # + temporal filter using MobilityDB if datetime pram
+        # check mobility functions **> not urgent clean 
+        if dt1 and dt2: 
+            query += f" AND tg.trajectory && tstzspan '[{dt1}, {dt2}]'"
+        elif dt1:     # instant 
+            # intesects same time instant (atPeriod didn't workd , re check slightly urgent)
+            query += f" AND tg.trajectory && tstzspan '[{dt1}, {dt1}]'"
+
+        query += f" ORDER BY mf.created_at LIMIT %s"
+        params.append(limit)
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
-
+        #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+        ##############################################prepare response################################################
         if not rows:
             return send_json_response(self, 200, json.dumps({
                 "type": "FeatureCollection",
                 "features": [],
-                "timeStamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "timeStamp": datetime.utcnow().isoformat() + "Z",
                 "numberMatched": 0,
                 "numberReturned": 0,
-                "links": [{"href": self.path, "rel": "self", "type": "application/geo+json"}]
+                "links": [{"href": self.path, "rel": "self", "type": "application/json"}]
             }))
 
-        total_count = rows[0][2]
-        features = []
+        total_count = rows[0][13]  
+        features_dict = {}
 
-        # features construction
+        # Group by feature since a feature can have 1..* geometries
         for row in rows:
             feature_id = row[0]
-            mf_json = json.loads(row[1]) if row[1] else None
-            if not mf_json:
-                continue
-
-            # subTrajectory
-            if subTrajectory:
-                dt1_sql = dt1.replace("T", " ")
-                dt2_sql = dt2.replace("T", " ")
-                cursor.execute(
-                    f"""
-                        SELECT asMFJSON(
-                            atstbox({trip_col}, stbox 'STBOX T([{dt1_sql},{dt2_sql}])')
-                        )
-                        FROM public.{collectionId}
-                        WHERE {id_col} = %s;
-                    """,
-                    [feature_id]
+            if feature_id not in features_dict:
+                # build base feat minus temp data (only moving_features cols)
+                feature_row = (
+                    row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
                 )
-                sub = cursor.fetchone()
-                if sub and sub[0]:
-                    mf_json = json.loads(sub[0])
+                feature = build_feature_from_row(feature_row, collection_id, include_temporal=False)
+                feature["temporalGeometry"] = []  
+                features_dict[feature_id] = feature
+            
+            # if temporal geometry **
+            if row[8]:  # geom_id
+                tgeom = row[10]  # trajectory
+                if tgeom:
+                    # Pymeos object t->MF-JSON
+                    mf_json = json.loads(tgeom.as_mfjson())
+#-------------------------------------------------------check------------------------------------------------
+                    # Apply subTrajectory if included req13
+                    if subTrajectory and dt1 and dt2:
+                        try:
+                            # Clean datetime str:
+                            dt1_clean = urllib.parse.unquote(dt1) if '%' in dt1 else dt1
+                            dt2_clean = urllib.parse.unquote(dt2) if '%' in dt2 else dt2
+                            
+                            # Replace 'T' with space for pqsl
+                            dt1_sql = dt1_clean.replace("T", " ")
+                            dt2_sql = dt2_clean.replace("T", " ")
+                            
+                            # temporal filter check repetition 
+                            sub_query = f"""
+                                SELECT asMFJSON(
+                                    atstbox(trajectory, stbox 'STBOX T([{dt1_sql},{dt2_sql}])')
+                                )
+                                FROM temporal_geometries
+                                WHERE id = %s
+                            """
+                            # print(f"Executing subTrajectory: {sub_query}") clean
+                            cursor.execute(sub_query, (row[8],))
+                            sub_row = cursor.fetchone()
+                            if sub_row and sub_row[0]:
+                                # print("subTrajectory SUCCESS")
+                                mf_json = json.loads(sub_row[0])
+                        except Exception as e:
+                            print(f"Error in subTrajectory query: {e}")
+                            connection.rollback()
+                            pass
+#----------------------------------------------------------------------------------------------------------------------------------
+                    # Apply leaf param if included (Req 24)
+                    if leaf and "datetimes" in mf_json:
+                        #Take only last point
+                        mf_json["coordinates"] = [mf_json["coordinates"][-1]]
+                        mf_json["datetimes"] = [mf_json["datetimes"][-1]]
+                        mf_json["interpolation"] = "Discrete"  # Req 24C
+     #**************************************************************************
+                    # Normalize datetimes like input timezone
+                    if "datetimes" in mf_json and dt1:
+                        new_dts = []
+                        for dt in mf_json["datetimes"]:
+                            dt_obj = parser.isoparse(dt)
+                            if dt1:
+                                try:
+                                    tzinfo = tz.gettz(dt1[-6:]) if '+' in dt1 else tz.gettz('UTC')
+                                    dt_obj = dt_obj.astimezone(tzinfo)
+                                except:
+                                    pass
+                            new_dts.append(dt_obj.isoformat())
+                        mf_json["datetimes"] = new_dts
+      #**************************************************************************               
+                    # Add to temporalGeometry array
+                    temporal_geom = {
+                        "id": row[8],
+                        "type": row[9] or "MovingPoint",
+                        "datetimes": mf_json.get("datetimes", []),
+                        "coordinates": mf_json.get("coordinates", []),
+                        "base": row[12]
+                    }
 
-            # leaf → last p -instnt
-            if leaf and "datetimes" in mf_json:
-                mf_json["coordinates"] = [mf_json["coordinates"][-1]]
-                mf_json["datetimes"] = [mf_json["datetimes"][-1]]
+                    # Use the interpolation from mf_json if leaf was applied
+                    if leaf and "interpolation" in mf_json:#DISCRETE
+                        temporal_geom["interpolation"] = mf_json["interpolation"]  
+                    else:
+                        temporal_geom["interpolation"] = row[11] or "Linear"
 
-            # Normalize datetimes to match input timezone
-            if "datetimes" in mf_json:
-                new_dts = []
-                for dt in mf_json["datetimes"]:
-                    dt_obj = parser.isoparse(dt)
-                    # Convert to requested tz if dt1 exists
-                    if dt1:
-                        tzinfo = tz.gettz(dt1[-3:])  # +01
-                        dt_obj = dt_obj.astimezone(tzinfo)
-                    new_dts.append(dt_obj.isoformat())
-                mf_json["datetimes"] = new_dts
+                    features_dict[feature_id]["temporalGeometry"].append(temporal_geom)
+        features = list(features_dict.values())
 
-            feature = {
-                "type": "Feature",
-                "id": feature_id,
-                "temporalGeometry": mf_json
-            }
-            features.append(feature)
 
-        response = {
-            "type": "FeatureCollection",
-            "features": features,
-            "timeStamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "numberMatched": total_count,
-            "numberReturned": len(features),
-            "links": [{"href": self.path, "rel": "self", "type": "application/geo+json"}]
-        }
+        base_url = f"http://{self.server.server_name}:{self.server.server_port}"
+        response = build_feature_collection_response(
+            features=features,
+            total_count=total_count,
+            limit=limit,
+            base_url=base_url,
+            path=f"/collections/{collection_id}/items",
+            bbox=bbox,
+            datetime_param=datetime_param
+        )
 
         send_json_response(self, 200, json.dumps(response))
 
     except Exception as e:
-        print("ERROR:", e)
+        connection.rollback()  
+        #clean::
+        # print("ERROR:", e)
+        # traceback.print_exc()
         self.handle_error(500, f"Internal server error: {str(e)}")

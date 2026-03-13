@@ -1,33 +1,12 @@
-# REQUIREMENT 15
-# IDENTIFIER
-# /req/movingfeatures/features-post
-
+# REQ15: /req/movingfeatures/features-post
+# REQ 17: /req/movingfeatures/features-post-success
 import uuid
-from datetime import datetime
-
-from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from utils import column_discovery, send_json_response, column_discovery2
-from pymeos.db.psycopg2 import MobilityDB
-from psycopg2 import sql
 import json
-from pymeos import pymeos_initialize, pymeos_finalize, TGeomPoint, Temporal
-from urllib.parse import urlparse, parse_qs
+from psycopg2 import sql
+from pymeos import TGeomPoint
 
-
-hostName = "localhost"
-serverPort = 8080
-
-host = 'localhost'
-port = 25431
-db = 'postgres'
-user = 'postgres'
-password = 'mysecretpassword'
-
-
-def post_collection_items(self, collectionId, connection, cursor):
+def post_collection_items(self, collection_id, connection, cursor):
     try:
-
         content_length = int(self.headers.get("Content-Length", 0))
         post_data = self.rfile.read(content_length)
         data = json.loads(post_data.decode("utf-8"))
@@ -35,108 +14,207 @@ def post_collection_items(self, collectionId, connection, cursor):
         object_type = data.get("type")
         if not object_type:
             raise Exception("DataError: Missing mandatory 'type'")
-#
+
+        # Check the target collection exists eg ships
         cursor.execute(
-            "SELECT 1 FROM pg_tables WHERE tablename=%s;", (collectionId,)
+            "SELECT id FROM collections WHERE id = %s",
+            (collection_id,)
         )
         if cursor.fetchone() is None:
-            raise Exception("DataError: collection does not exist")
+            raise Exception(f'DataError: collection with id {collection_id} does not exist')
 
-        created_feature_ids = []   # <-- list of all new features created
+        created_feature_ids = []
 
         if object_type == "FeatureCollection":
             features = data.get("features")
             if not isinstance(features, list):
-                raise Exception(
-                    "DataError: FeatureCollection missing 'features' array")
+                raise Exception("DataError: FeatureCollection missing 'features' array")
 
             for feat in features:
-                new_id = self.insert_feature(
-                    feat, collectionId, connection, cursor)
-                created_feature_ids.append(new_id)
+                new_id = insert_feature(self, feat, collection_id, connection, cursor)
+                if new_id:
+                    created_feature_ids.append(new_id)
 
         elif object_type == "Feature":
-            new_id = self.insert_feature(
-                data, collectionId, connection, cursor)
-            created_feature_ids.append(new_id)
-
+            new_id = insert_feature(self, data, collection_id, connection, cursor)
+            if new_id:
+                created_feature_ids.append(new_id)
+#object_type is neither Feature or FeatureCollection
         else:
             raise Exception("DataError: Invalid 'type'")
 
         connection.commit()
 
+        # Req17: 201 POST with location headers
         self.send_response(201)
-        self.send_header("Content-Type", "application/geo+json")
-
+        self.send_header("Content-Type", "application/json")
+        
+        # Add Location header for each created feature
         for fid in created_feature_ids:
-            loc = f"/collections/{collectionId}/items/{fid}"
-            self.send_header("Location", loc)
-
+            self.send_header("Location", f"/collections/{collection_id}/items/{fid}")
+        
         self.end_headers()
-
-        # self.wfile.write(post_data)
+        
+        response = {
+            "message": f"Created {len(created_feature_ids)} features",
+            "ids": created_feature_ids
+        }
+        self.wfile.write(bytes(json.dumps(response), "utf-8"))
 
     except Exception as e:
         msg = str(e)
-        if "DataError" in msg:
-            code = 400
-        elif "does not exist" in msg:
+        if "does not exist" in msg:
             code = 404
-        elif "ConflictError" in msg:
+        elif "DataError" in msg:
+            code = 400
+        elif "duplicate key" in msg.lower():
             code = 409
         else:
             code = 500
         print("error", msg)
-        # self.handle_error(code, msg)
+        self.handle_error(code, msg)
 
-
-def insert_feature(self, feature, collectionId, connection, cursor):
-
+#add single moving feature to moving_features table
+def insert_feature(self, feature, collection_id, connection, cursor):
     if feature.get("type") != "Feature":
         raise Exception("DataError: Invalid feature type")
 
+    # generate or use given feature ID
     feat_id = feature.get("id")
     if feat_id is None:
         feat_id = str(uuid.uuid4())
     else:
         feat_id = str(feat_id)
 
-    temporalGeometry = feature.get("temporalGeometry")
-    tGeomPoint = None
-    if temporalGeometry:
-        if isinstance(temporalGeometry, dict):
-            tGeomPoint = TGeomPoint.from_mfjson(json.dumps(temporalGeometry))
-        else:
-            tGeomPoint = TGeomPoint.from_mfjson(temporalGeometry)
+    # *convert temporalGeometry to TGeomPoint
+    temporal_geometry = feature.get("temporalGeometry")
+    tgeom_str = None
+    if temporal_geometry:#either tempGeom os given as dict or json to str
+        if isinstance(temporal_geometry, dict):
+            tgeom = TGeomPoint.from_mfjson(json.dumps(temporal_geometry))
+            tgeom_str = str(tgeom)
+        elif isinstance(temporal_geometry, str):
+            tgeom = TGeomPoint.from_mfjson(temporal_geometry)
+            tgeom_str = str(tgeom)
 
-    # check existing columns
-    cursor.execute(
-        "SELECT column_name FROM information_schema.columns WHERE table_name=%s;",
-        (collectionId,),
-    )
-    existing_cols = {row[0].lower() for row in cursor.fetchall()}
+    # remaining fields
+    properties = feature.get("properties", {})
+    geometry = feature.get("geometry")
+    bbox = feature.get("bbox")
+    #mf life span time range:
+    time_range = feature.get("time")
+    crs = feature.get("crs")
+    trs = feature.get("trs")
 
-    # add columns if missing
-    if "temporalgeometry" not in existing_cols and tGeomPoint is not None:
-        cursor.execute(
-            sql.SQL(
-                "ALTER TABLE {} ADD COLUMN temporalgeometry public.tgeompoint;"
-            ).format(sql.Identifier(collectionId))
+    # Format time as tstzrange if provided
+    time_str = None
+    # time [stat, end]
+    if time_range and isinstance(time_range, list) and len(time_range) == 2:
+        # time_str = f"[{time_range[0]}, {time_range[1]}]" clean
+        time_str = json.dumps(time_range)
+#__________________________________________________________________________________check required tables exist____________________________________________
+    #If moving_features table not exists, then create it
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS moving_features (
+            id TEXT PRIMARY KEY,
+            collection_id TEXT REFERENCES collections(id) ON DELETE CASCADE,
+            type TEXT DEFAULT 'Feature',
+            geometry JSONB,
+            properties JSONB,
+            bbox JSONB,
+            time_range TSTZRANGE,
+            crs JSONB,
+            trs JSONB,
+            created_at TIMESTAMP DEFAULT NOW()
         )
-        connection.commit()
+    """)
+    
+    #If temporal_geometries table not exists, then create it
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS temporal_geometries (
+            id SERIAL PRIMARY KEY,
+            feature_id TEXT REFERENCES moving_features(id) ON DELETE CASCADE,
+            geometry_type TEXT,
+            trajectory tgeompoint,
+            interpolation TEXT,
+            base JSONB,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    
+    #If temporal_properties nad temporal_values tables not exists, then create
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS temporal_properties (
+            id SERIAL PRIMARY KEY,
+            feature_id TEXT REFERENCES moving_features(id) ON DELETE CASCADE,
+            property_name TEXT NOT NULL,
+            property_type TEXT NOT NULL,
+            form TEXT,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS temporal_values (
+            id SERIAL PRIMARY KEY,
+            property_id INTEGER REFERENCES temporal_properties(id) ON DELETE CASCADE,
+            datetimes TIMESTAMP[] NOT NULL,
+            values JSONB NOT NULL,
+            interpolation TEXT DEFAULT 'Linear',
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    
+    
+    connection.commit()
+#___________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________
 
-    # --------- Insert the feature with conflict check ---------
-    cursor.execute(
-        sql.SQL(
-            "INSERT INTO {} (id, temporalgeometry) VALUES (%s, %s::tgeompoint) "
-            "ON CONFLICT (id) DO NOTHING RETURNING id;"
-        ).format(sql.Identifier(collectionId)),
-        (feat_id, str(tGeomPoint))
-    )
+    # INSERT INTO moving_features :temporal_geometries:Insert feature into moving_features table
+    cursor.execute("""
+        INSERT INTO moving_features 
+        (id, collection_id, type, geometry, properties, bbox, time_range, crs, trs)
+        VALUES (%s, %s, %s, %s, %s, %s, %s::tstzrange, %s, %s)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+    """, (
+        feat_id,
+        collection_id,
+        "Feature",
+        json.dumps(geometry) if geometry else None,#jsonbytes
+        json.dumps(properties),
+        json.dumps(bbox) if bbox else None,
+        time_str,
+        json.dumps(crs) if crs else None,
+        json.dumps(trs) if trs else None
+    ))
+    
     inserted = cursor.fetchone()
+    
+    # INSERT INTO temporal_geometries: If the create feature has a temporal_geom, then add to temporal_geometries table    
+    #RE CHECK OGC (must the uiser always provide the temporal geom unsure 40 percent)
+    if inserted and tgeom_str:
+        geometry_type = "MovingPoint"  # Default 
+        if temporal_geometry and isinstance(temporal_geometry, dict):
+            geometry_type = temporal_geometry.get("type", "MovingPoint") #get geom_type of not default MovingPoint
+            interpolation = temporal_geometry.get("interpolation", "Linear")
+        else:
+            interpolation = "Linear"
+        # RE CHECK OGC: i'm assuming i receive one trajectory per inserted feature, what if it's multiple temporal_geometries (trajs) ==>
+        cursor.execute("""
+            INSERT INTO temporal_geometries 
+            (feature_id, geometry_type, trajectory, interpolation)
+            VALUES (%s, %s, %s::tgeompoint, %s)
+        """, (
+            feat_id,
+            geometry_type,
+            tgeom_str,
+            interpolation
+        ))
+    
     if inserted:
         print(f"Inserted feature {feat_id}")
+        return feat_id
     else:
         print(f"Feature {feat_id} already exists, skipped")
-
-    return feat_id
+        return None
