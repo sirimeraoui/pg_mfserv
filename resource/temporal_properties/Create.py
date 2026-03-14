@@ -90,3 +90,5 @@ def post_tproperties(self, collection_id, feature_id, connection, cursor):
         # print(f"Error in post_tproperties: {e}")
         # traceback.print_exc()
         self.handle_error(500, f"Internal server error: {str(e)}")
+
+        
