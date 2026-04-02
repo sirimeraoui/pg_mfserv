@@ -8,7 +8,7 @@ import time
 HOST = "http://localhost:8080"
 
 pymeos_initialize()
-with open("data/trajectories_mf1.json") as f:
+with open("../data/trajectories_mf1.json") as f:
     data = json.load(f)
 
 
@@ -125,6 +125,10 @@ def setup_query_test_data():
     feature = {
         "type": "Feature",
         "id": "query_test_001", #???? check
+        "crs": {  # ← ADD THIS
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::4326"  
+    },
         "temporalGeometry": TemporalGeometry ,
         "properties": {
             "name": "Query Test Feature",
@@ -245,6 +249,10 @@ def test_create_single_feature(create_collections):
     feature = {
         "type": "Feature",
         "id": str(feature_data["mmsi"]),
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "temporalGeometry": feature_data["trajectory"],
         "properties": {
             "name": f"Ship_{feature_data['mmsi']}",
@@ -271,6 +279,10 @@ def test_create_feature_collection(create_collections):
         features.append({
             "type": "Feature",
             "id": str(obj["mmsi"]),
+            "crs": {  
+                "type": "name",
+                "properties": "urn:ogc:def:crs:EPSG::25832"
+             },
             "temporalGeometry": obj["trajectory"],
             "properties": {
                 "name": f"Ship_{obj['mmsi']}",
@@ -641,6 +653,10 @@ def setup_property_test_data():
     feature = {
         "type": "Feature",
         "id": "prop_test_001",
+         "crs": {  #
+        "type": "name",
+        "properties": "urn:ogc:def:crs:EPSG::4326"  
+    },
         "temporalGeometry": TemporalGeom,
         "properties": {"name": "Property Test Feature"}
     }

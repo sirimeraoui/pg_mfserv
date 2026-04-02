@@ -26,7 +26,7 @@ def get_movement_single_moving_feature(self, collection_id, feature_id, connecti
                 mf.geometry,
                 mf.properties,
                 mf.bbox,
-                mf.time_range,
+                mf.time_range::text,
                 mf.crs,
                 mf.trs,
                 json_agg(

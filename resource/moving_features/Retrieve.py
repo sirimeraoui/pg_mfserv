@@ -77,10 +77,10 @@ def get_collection_items(self, collection_id, connection, cursor):
             SELECT 
                 mf.id,
                 mf.type,
-                mf.geometry,
+                ST_AsGeoJSON(ST_Transform(ST_SetSRID(trajectory(tg.trajectory), 25832), 4326)) as geometry,
                 mf.properties,
                 mf.bbox,
-                mf.time_range,
+                mf.time_range::text,
                 mf.crs,
                 mf.trs,
                 tg.id as geom_id,

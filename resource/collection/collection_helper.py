@@ -2,15 +2,12 @@ from utils import send_json_response
 import json
 
 def build_collection_response(collection, base_url):
-    """Build the post new collection response object"""
     return {
         "id": collection['id'],
         "title": collection['title'],
         "description": collection['description'],
         "itemType": collection['item_type'],
         "updateFrequency": collection['update_frequency'],
-        "crs": collection['crs'],
-        "trs": collection['trs'],
         "extent": None,  
         "links": [
             {
@@ -28,7 +25,6 @@ def build_collection_response(collection, base_url):
 
 
 def build_collections_list_response(collections, base_url):
-    """Build collections list response"""
     return {
         "collections": collections,
         "links": [
@@ -42,9 +38,8 @@ def build_collections_list_response(collections, base_url):
 
 
 def fetch_collection_by_id(cursor, collection_id):
-    """Fetch one collection by id"""
     cursor.execute("""
-        SELECT id, title, description, update_frequency, item_type, crs, trs
+        SELECT id, title, description, update_frequency, item_type
         FROM collections
         WHERE id = %s
     """, (collection_id,))
@@ -58,9 +53,8 @@ def fetch_collection_by_id(cursor, collection_id):
 
 
 def fetch_all_collections(cursor):
-    """Fetch all collections"""
     cursor.execute("""
-        SELECT id, title, description, update_frequency, item_type, crs, trs
+        SELECT id, title, description, update_frequency, item_type
         FROM collections
         ORDER BY created_at DESC
     """)
@@ -79,10 +73,6 @@ def fetch_all_collections(cursor):
 
 ####################################################"Create and Replace helpers"
 def validate_collection_data(data, is_update=False):
-    """
-    Validate collection data for both create and update operations
-    Returns (errors, validated_data)
-    """
     errors = []
     validated = {}
     #if create aka post: operation
@@ -112,12 +102,7 @@ def validate_collection_data(data, is_update=False):
         # updateFrequency can be set only for POST,  can't be replaced:
         validated["updateFrequency"] = data["updateFrequency"]
     
-    if "crs" in data:
-        validated["crs"] = data["crs"]
-    
-    if "trs" in data:
-        validated["trs"] = data["trs"]
-    
+
     return errors, validated
 
 # Check collection existance by ID:
@@ -131,25 +116,21 @@ def collection_exists(cursor, collection_id):
 
 #________________________________rr
 def insert_collection(cursor, collection_id, data):
-    """Create new collection"""
     cursor.execute("""
         INSERT INTO collections 
-        (id, title, description, update_frequency, item_type, crs, trs)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        (id, title, description, update_frequency, item_type)
+        VALUES (%s, %s, %s, %s, %s)
         RETURNING id
     """, (
         collection_id,
         data.get("title"),
         data.get("description"),
         data.get("updateFrequency"),
-        data.get("itemType", "movingfeature"),
-        json.dumps(data.get("crs")) if data.get("crs") else None,#JSONB
-        json.dumps(data.get("trs")) if data.get("trs") else None#JSONB
+        data.get("itemType", "movingfeature")
     ))
     return cursor.fetchone()[0]
 
 def update_collection(cursor, collection_id, data):
-    """Replace existing collection metadata"""
     updates = []
     values = []
     
@@ -162,13 +143,6 @@ def update_collection(cursor, collection_id, data):
     if "itemType" in data:
         updates.append("item_type = %s")
         values.append(data["itemType"])
-    if "crs" in data:
-        updates.append("crs = %s")
-        values.append(json.dumps(data["crs"]))
-    if "trs" in data:
-        updates.append("trs = %s")
-        values.append(json.dumps(data["trs"]))
-    
     updates.append("updated_at = NOW()")
     
     if updates:

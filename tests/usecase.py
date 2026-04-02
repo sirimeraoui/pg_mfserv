@@ -2,29 +2,19 @@ import pytest
 import requests
 import json
 from pymeos import *
-
+import json
+from datetime import datetime
+from common import log_request_response, log_to_json
 HOST = "http://localhost:8080"
 
 pymeos_initialize()
 
-def log_request_response(action: str, response: requests.Response):
-    req = response.request
-    print(f"\n===| {action.upper()} |===")
-    print(f"==> {req.method} {req.url}")
-    if req.body:
-        try:
-            body = json.loads(req.body)
-            print("Request JSON:", json.dumps(body, indent=2)[:500])
-        except Exception:
-            print("Request body:", req.body[:500])
-    print(f"<== Status: {response.status_code}")
-    try:
-        print("Response JSON:", json.dumps(response.json(), indent=2)[:500])
-    except Exception:
-        print("Response Text:", response.text[:500])
-    print("=" * 60 + "\n")
+# loggerto JSON
+API_LOGS = []
 
-#ships 
+
+
+#ships  data
 # 
 VESSELS_DATA = [
     {
@@ -32,6 +22,10 @@ VESSELS_DATA = [
         "name": "Maersk Essen",
         "type": "container",
         "in_port": True,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -42,11 +36,11 @@ VESSELS_DATA = [
                 "2024-03-15 08:00:00+00"
             ],
             "coordinates": [
-                [585000, 5672000],  
-                [587000, 5674000],  
-                [589000, 5676000], 
-                [591000, 5678000], 
-                [592000, 5679000] 
+                [585000, 5672000],
+                [587000, 5674000],
+                [589000, 5676000],
+                [591000, 5678000],
+                [592000, 5679000]
             ],
             "interpolation": "Linear"
         }
@@ -56,6 +50,10 @@ VESSELS_DATA = [
         "name": "CMA CGM Libra",
         "type": "container",
         "in_port": True,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -66,11 +64,11 @@ VESSELS_DATA = [
                 "2024-03-15 10:00:00+00"
             ],
             "coordinates": [
-                [584000, 5671000],  
-                [586000, 5673000],  
-                [587000, 5674000], 
-                [587000, 5674000],  
-                [587000, 5674000]   
+                [584000, 5671000],
+                [586000, 5673000],
+                [587000, 5674000],
+                [587000, 5674000],
+                [587000, 5674000]
             ],
             "interpolation": "Linear"
         }
@@ -80,6 +78,10 @@ VESSELS_DATA = [
         "name": "MSC Zoe",
         "type": "container",
         "in_port": True,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -104,6 +106,10 @@ VESSELS_DATA = [
         "name": "Ever Given",
         "type": "container",
         "in_port": True,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -128,6 +134,10 @@ VESSELS_DATA = [
         "name": "Stena Impero",
         "type": "tanker",
         "in_port": True,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -147,13 +157,15 @@ VESSELS_DATA = [
             "interpolation": "Linear"
         }
     },
-    
-    # OUTSIDE PORT ships
     {
         "id": "european_trader",
         "name": "European Trader",
         "type": "bulk",
         "in_port": False,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -178,6 +190,10 @@ VESSELS_DATA = [
         "name": "Belgium Chem",
         "type": "chemical",
         "in_port": False,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -202,6 +218,10 @@ VESSELS_DATA = [
         "name": "Antwerp Star",
         "type": "container",
         "in_port": False,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -226,6 +246,10 @@ VESSELS_DATA = [
         "name": "Schelde River",
         "type": "tug",
         "in_port": False,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -250,6 +274,10 @@ VESSELS_DATA = [
         "name": "Diamond Express",
         "type": "container",
         "in_port": False,
+        "crs": {
+            "type": "name",
+            "properties": "urn:ogc:def:crs:EPSG::25832"
+        },
         "trajectory": {
             "type": "MovingPoint",
             "datetimes": [
@@ -270,7 +298,6 @@ VESSELS_DATA = [
         }
     }
 ]
-
 
 @pytest.fixture(scope="module")
 def setup_port_data():
@@ -295,6 +322,7 @@ def setup_port_data():
         features_list.append({
             "type": "Feature",
             "id": vessel["id"],
+            "crs": vessel.get("crs"),  # ← ADD THIS LINE
             "temporalGeometry": vessel["trajectory"],
             "properties": {
                 "name": vessel["name"],
@@ -335,7 +363,8 @@ def test_1_get_ships_in_port(setup_port_data):
     collection_id = data["collection_id"]
     
     # Antwerp port area (meters, EPSG:25832) example
-    port_bbox = "585000,5670000,592000,5678000"
+    # port_bbox ="4.146652,51.218067,4.443283,51.309155"
+    port_bbox = "584000,5670000,593000,5680000"
     
     resp = requests.get(
         f"{HOST}/collections/{collection_id}/items",
@@ -356,7 +385,7 @@ def test_1_get_ships_in_port(setup_port_data):
         print(f"  → {ship['id']} ({ship['properties']['name']})")
     print(f"{'='*60}\n")
     
-    # EXPECT: 5 ships in port
+    # EXPECT: 9ships in port
     assert len(ships_in_port) == 8
 
 

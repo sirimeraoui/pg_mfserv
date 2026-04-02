@@ -1,10 +1,21 @@
 import json 
 from datetime import datetime
+
+import re
+from datetime import datetime
 def build_feature_from_row(row, collection_id, include_temporal=True):
+    geometry_json = row[2]
+    if geometry_json and isinstance(geometry_json, str):
+        try:
+            geometry = json.loads(geometry_json)
+        except:
+            geometry = None
+    else:
+        geometry = None
     feature = {
         "type": "Feature",
         "id": str(row[0]),
-        "geometry": row[2],
+        "geometry": geometry,
         "properties": row[3] or {},
         "bbox": row[4],
         "crs": row[6],
@@ -89,4 +100,8 @@ def build_feature_collection_response(features, total_count, limit, base_url, pa
         })
 
     return response
+
+
+
+
 

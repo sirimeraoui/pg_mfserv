@@ -13,6 +13,8 @@ import zipfile
 
 # AIS DEMO
 
+# AIS DEMO
+
 
 def get_csv_from_zip(zip_path, extract_path="../data"):
     # Ensure data filder exists
@@ -265,44 +267,46 @@ def create_dash_app(df, engine, perform_kalman_filtering):
         Input('mmsi-dropdown-traj', 'value')
     )
     def update_traj_plot(selected_mmsi):
-        query = f"""
-            SELECT geomproj, T AS timestamp 
-            FROM AISInputSample 
-            WHERE MMSI = {selected_mmsi} 
-            ORDER BY T;
-        """
-        gdf = gpd.read_postgis(query, engine, geom_col='geomproj')
-        gdf['timestamp'] = pd.to_datetime(gdf['timestamp'])
+        if selected_mmsi is not None:
+                # Fetch trajectory data
+                query = f"SELECT geomproj, t AS timestamp FROM AISInputSample WHERE mmsi = {selected_mmsi} ORDER BY t;"
+                gdf = gpd.read_postgis(query, engine, geom_col='geomproj')
 
-        if gdf.empty:
-            return go.Figure(layout=go.Layout(title='No trajectory data available'))
+                # Call the Kalman filtering function
+                smoothed_coords = perform_kalman_filtering(gdf)
 
-        # Use the passed kalman function
-        smoothed_coords = perform_kalman_filtering(gdf)
+                # Prepare data for plotting
+                original_x = gdf.geometry.x
+                original_y = gdf.geometry.y
+                smoothed_x = [coord[0] for coord in smoothed_coords]
+                smoothed_y = [coord[1] for coord in smoothed_coords]
 
-        original_x = gdf.geometry.x
-        original_y = gdf.geometry.y
+                # Plotting the trajectories
+                fig = go.Figure()
+                fig.add_trace(go.Scattergl(x=original_x, y=original_y, mode='lines', name='Original Path'))
+                fig.add_trace(go.Scattergl(x=smoothed_x, y=smoothed_y, mode='lines', name='Smoothed Path'))
+                fig.update_layout(xaxis_title='x-coordinate', yaxis_title='y-coordinate', 
+                                xaxis=dict(
+                                    tickmode='auto',
+                                    tickformat=',',  # This will ensure that numbers are separated by commas but not in scientific notation
+                                ),
+                                yaxis=dict(
+                                    tickmode='auto',
+                                    tickformat=','
+                                ),
+                                margin={'l': 80, 'b': 140, 't': 50, 'r': 10},
+                                font=dict(
+                                    family="Times New Roman",
+                                    size=18,
+                                    color= "black"
+                                ),
+                                autosize=False,
+                                width=1000,
+                                height=400,
+                                )
+                return fig
 
-        fig = go.Figure()
-        fig.add_trace(go.Scattergl(x=original_x, y=original_y, mode='lines+markers', name='Original Path',
-                                   line=dict(color='blue', width=2), marker=dict(size=4)))
-
-        if len(smoothed_coords) > 0:
-            fig.add_trace(go.Scattergl(x=smoothed_coords[:, 0], y=smoothed_coords[:, 1], mode='lines+markers',
-                                       name='Kalman Smoothed', line=dict(color='red', width=2), marker=dict(size=4)))
-
-        fig.update_layout(
-            title=f'MMSI {selected_mmsi} - Trajectory Smoothing with Kalman Filter',
-            xaxis_title='Longitude (projected)',
-            yaxis_title='Latitude (projected)',
-            margin={'l': 80, 'b': 140, 't': 50, 'r': 10},
-            font=dict(family="Times New Roman", size=18, color="black"),
-            autosize=False,
-            width=1000,
-            height=500,
-            hovermode='closest'
-        )
-        return fig
+        return go.Figure()  
 
     @app.callback(
         Output("download-pdf-traj", "data"),

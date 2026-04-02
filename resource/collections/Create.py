@@ -35,8 +35,6 @@ def post_collections(self, connection, cursor):
                 description TEXT,
                 update_frequency INTEGER,
                 item_type TEXT DEFAULT 'movingfeature',
-                crs JSONB,
-                trs JSONB,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             )
@@ -62,9 +60,7 @@ def post_collections(self, connection, cursor):
             "title": validated_data.get("title"),
             "description": validated_data.get("description"),
             "item_type": validated_data.get("itemType", "movingfeature"),
-            "update_frequency": validated_data.get("updateFrequency"),
-            "crs": validated_data.get("crs"),
-            "trs": validated_data.get("trs")
+            "update_frequency": validated_data.get("updateFrequency")
         }
         #!!>  recheck code clean collection_data
         response = build_collection_response(collection_data, base_url)

@@ -4,7 +4,7 @@
 
 -- Section 9.2 AIS Data Cleaning
 -- Loading
-CREATE EXTENSION MobilityDB CASCADE;
+CREATE EXTENSION IF NOT EXISTS MobilityDB CASCADE;
 
 --loading data (similar to CH5)
 DROP TABLE AISInput;
@@ -44,7 +44,7 @@ COPY AISInput(T, TypeOfMobile, MMSI, Latitude, Longitude, NavigationalStatus,
   ROT, SOG, COG, Heading, IMO, CallSign, Name, ShipType, CargoType, Width, Length,
   TypeOfPositionFixingDevice, Draught, Destination, ETA, DataSourceType,
   SizeA, SizeB, SizeC, SizeD)
-FROM :data_csv_path DELIMITER  ',' CSV HEADER;
+FROM :data_csv_path DELIMITER  ',' CSV HEADER ;
 
 -- Initial filtering and transformation:
 UPDATE AISInput
@@ -199,22 +199,22 @@ LIMIT 100;
 -- possibly other gorups of compatible data types.
 
 -- By scanning the results fo this query, we identify the following placeholders:
-| column\_name | value | frequency |
-| :--- | :--- | :--- |
-| IMO | Unknown | 555622 |
-| Destination | Unknown | 344362 |
-| navigationalStatus | Unknown value | 211223 |
-| ShipType | Undefined | 136437 |
+-- | column\_name | value | frequency |
+-- | :--- | :--- | :--- |
+-- | IMO | Unknown | 555622 |
+-- | Destination | Unknown | 344362 |
+-- | navigationalStatus | Unknown value | 211223 |
+-- | ShipType | Undefined | 136437 |
 
 -- Depending on the dataset, you need to ensure that any identified placeholders like 'unknown' are indeed meant to be
 -- interpreted as NULL. Sometimes, terms like 'unknown' might be legitimate data points depending on the context. In the
 -- results of the above query, there were other less clear situations, that can raise argument whether or not they
 -- should be replaced by NULL. For this example, we leave them unchanged.
 
-| ShipType | Other | 62958 |
-| ETA | 01/01/2025 00:00:00 | 23285 |
-| CargoType | Reserved for future use | 21517 |
-| navigationalStatus | Reserved for future amendment \[HSC\] | 15530 |
+-- | ShipType | Other | 62958 |
+-- | ETA | 01/01/2025 00:00:00 | 23285 |
+-- | CargoType | Reserved for future use | 21517 |
+-- | navigationalStatus | Reserved for future amendment \[HSC\] | 15530 |
 
 -- Based on the identified non-standard placeholders for NULL in your database from the provided table, you can write
 -- SQL UPDATE statements to replace these placeholders with actual NULL values in each specified column of your AISInput

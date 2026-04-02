@@ -85,6 +85,9 @@ def insert_feature(self, feature, collection_id, connection, cursor):
         feat_id = str(uuid.uuid4())
     else:
         feat_id = str(feat_id)
+    bbox_calculated = None
+    time_range_calculated = None
+    tgeom = None
 
     # *convert temporalGeometry to TGeomPoint
     temporal_geometry = feature.get("temporalGeometry")
@@ -96,8 +99,20 @@ def insert_feature(self, feature, collection_id, connection, cursor):
         elif isinstance(temporal_geometry, str):
             tgeom = TGeomPoint.from_mfjson(temporal_geometry)
             tgeom_str = str(tgeom)
-
-    # remaining fields
+    if tgeom:
+        # geometry_geojson = tgeom.as_geojson(srs="EPSG:25832")  #works 1 over 2
+        # bounding box
+        stbox = tgeom.bounding_box()
+        # space range
+        bbox_calculated = [
+            stbox.xmin(), 
+            stbox.ymin(), 
+            stbox.xmax(),  
+            stbox.ymax()  
+        ]
+        # time range
+        time_range_calculated = [stbox.tmin().isoformat(), stbox.tmax().isoformat()]
+        
     properties = feature.get("properties", {})
     geometry = feature.get("geometry")
     bbox = feature.get("bbox")
@@ -106,6 +121,14 @@ def insert_feature(self, feature, collection_id, connection, cursor):
     crs = feature.get("crs")
     trs = feature.get("trs")
 
+
+    if bbox is None and bbox_calculated:
+        bbox = bbox_calculated
+        print(f"Calculated bbox for {feat_id}: {bbox}")
+
+    if time_range is None and time_range_calculated:
+        time_range = time_range_calculated
+        print(f"Calculated time_range for {feat_id}: {time_range}")
     # Format time as tstzrange if provided
     time_str = None
     # time [stat, end]
@@ -119,7 +142,7 @@ def insert_feature(self, feature, collection_id, connection, cursor):
             id TEXT PRIMARY KEY,
             collection_id TEXT REFERENCES collections(id) ON DELETE CASCADE,
             type TEXT DEFAULT 'Feature',
-            geometry JSONB,
+            geometry geometry,
             properties JSONB,
             bbox JSONB,
             time_range TSTZRANGE,
@@ -174,14 +197,14 @@ def insert_feature(self, feature, collection_id, connection, cursor):
     cursor.execute("""
         INSERT INTO moving_features 
         (id, collection_id, type, geometry, properties, bbox, time_range, crs, trs)
-        VALUES (%s, %s, %s, %s, %s, %s, %s::tstzrange, %s, %s)
+        VALUES (%s, %s, %s, trajectory(%s::tgeompoint), %s, %s, %s::tstzrange, %s, %s)
         ON CONFLICT (id) DO NOTHING
         RETURNING id
     """, (
         feat_id,
         collection_id,
         "Feature",
-        json.dumps(geometry) if geometry else None,#jsonbytes
+        tgeom_str, 
         json.dumps(properties),
         json.dumps(bbox) if bbox else None,
         time_str,

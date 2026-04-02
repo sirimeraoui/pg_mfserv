@@ -40,7 +40,7 @@ query = """
     WHERE MMSI IN (
         SELECT MMSI
         FROM (SELECT DISTINCT MMSI FROM AISInputSample) AS UniqueMMSIs
-        ORDER BY RANDOM() LIMIT 10
+        ORDER BY RANDOM() LIMIT 100
     )
     ORDER BY MMSI, t;
 """
@@ -81,70 +81,72 @@ df['heading_outliers'] = detect_outliers(df, 'heading')
 # Kalman filter function for trajectory
 
 
+#  Kalman filtering code
 def perform_kalman_filtering(gdf):
-    if len(gdf) < 2:
-        return np.array([])
-
+    # Define measurement and transition models
     measurement_noise_std = [10.0, 10.0]
     measurement_model = LinearGaussian(
-        ndim_state=4,
+        ndim_state=4,  # position and velocity in 2D
         mapping=(0, 2),
-        noise_covar=np.diag([measurement_noise_std[0]**2,
-                            measurement_noise_std[1]**2])
+        noise_covar=np.diag([measurement_noise_std[0]**2, measurement_noise_std[1]**2])
     )
 
-    process_noise_std = [1, 1]
+    process_noise_std = [1, 1]  # Modify based on application needs
     transition_model = CombinedLinearGaussianTransitionModel([
         ConstantVelocity(process_noise_std[0]**2),
         ConstantVelocity(process_noise_std[1]**2)
     ])
 
-    detections = []
-    for _, row in gdf.iterrows():
-        if hasattr(row.geomproj, 'x') and hasattr(row.geomproj, 'y'):
-            detections.append(
-                Detection(
-                    np.array([row.geomproj.x, row.geomproj.y]),
-                    timestamp=row.timestamp,
-                    measurement_model=measurement_model
-                )
-            )
+    # Create detections
+    detections = [
+        Detection(np.array([row.geomproj.x, row.geomproj.y]), timestamp=row.timestamp, measurement_model=measurement_model)
+        for _, row in gdf.iterrows()
+    ]
+    
+    # Extract initial state
+    initial_state_mean = [gdf.geomproj.iloc[0].x, 0, gdf.geomproj.iloc[0].y, 0]  # [x, x_velocity, y, y_velocity]
+    initial_state_covariance = np.diag([measurement_noise_std[0]**2, 
+                                        measurement_noise_std[0]**2, 
+                                        process_noise_std[1]**2, 
+                                        process_noise_std[1]**2])
+    initial_state = GaussianState(initial_state_mean, initial_state_covariance, timestamp=detections[0].timestamp)
 
-    if not detections:
-        return np.array([])
 
-    initial_state_mean = [gdf.geomproj.iloc[0].x, 0, gdf.geomproj.iloc[0].y, 0]
-    initial_state_covariance = np.diag([
-        measurement_noise_std[0]**2,
-        measurement_noise_std[0]**2,
-        process_noise_std[1]**2,
-        process_noise_std[1]**2
-    ])
-    initial_state = GaussianState(
-        initial_state_mean, initial_state_covariance, timestamp=detections[0].timestamp)
-
+    # Kalman filter execution
     predictor = KalmanPredictor(transition_model)
     updater = KalmanUpdater(measurement_model)
+    
+
+    # List to store filtered states
     filtered_states = []
 
+    # Filtering process
     for i, detection in enumerate(detections):
         if i == 0:
+            # For the first measurement, there is no prediction step
             predicted_state = initial_state
         else:
-            predicted_state = predictor.predict(
-                filtered_states[-1], timestamp=detection.timestamp)
 
+            # Predict the next state using the prior state
+            predicted_state = predictor.predict(filtered_states[-1], timestamp=detection.timestamp)
+
+        # Create a hypothesis associating the predicted state with the detection
         hypothesis = SingleHypothesis(predicted_state, detection)
+
+        # Update the state with the hypothesis
         updated_state = updater.update(hypothesis)
+
+        # Store the filtered state
         filtered_states.append(updated_state)
 
-    smoothed_coords = np.array(
-        [[state.state_vector[0, 0], state.state_vector[2, 0]] for state in filtered_states])
+    # Extract the smoothed coordinates
+    smoothed_coords = np.array([[state.state_vector[0, 0], state.state_vector[2, 0]] for state in filtered_states])
     return smoothed_coords
+
 
 
 # Create Dash app for all data cleaning steps in different tabs each
 app = create_dash_app(df, engine, perform_kalman_filtering)
 # Launch dash visualization
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)

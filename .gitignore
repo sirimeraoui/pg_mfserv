@@ -161,7 +161,7 @@ cython_debug/
 #.idea/
 
 *.zip
-
+*.csv
 #developement
 notes.md
 debug.md
